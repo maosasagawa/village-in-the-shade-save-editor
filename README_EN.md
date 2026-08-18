@@ -33,8 +33,9 @@ Both are auto-detected.
 4. Click "Save Changes". The first write creates a `save.001.bak` backup
 5. To recover: delete `save.001`, rename `save.001.bak` back
 
-Empty slots are supported: pick an item and apply — the editor splices a new
-record and fixes up the save structure (fresh uniqueID included).
+Note: adding items to empty slots is currently disabled (record insertion
+crashes the game on load). To obtain new items, replace an existing item
+(change its ID + count).
 
 ## Affection mechanics (reverse engineered from gamedefine)
 

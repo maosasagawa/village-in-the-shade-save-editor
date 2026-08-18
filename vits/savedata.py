@@ -184,9 +184,16 @@ class SaveData:
         self._patch(val, uid + 1, val['size'])
         return uid
 
+    # 已知问题: 记录插入会导致游戏读档闪退(疑与 t4 addr/偏移一致性校验有关), 默认禁用
+    ALLOW_INSERT = False
+
     def fill_slot(self, index, item_id, count=1, rank=0):
-        """Create an item in an empty inventory slot by splicing a copy of a
-        non-empty slot record, then fixing all ancestor sizes + header."""
+        """EXPERIMENTAL: splice a new record into an empty slot.
+        Disabled by default - known to crash the game on load."""
+        if not self.ALLOW_INSERT:
+            raise ValueError('空格子添加已禁用(会导致游戏读档闪退)。'
+                             '请改为替换背包中现有物品 / Empty-slot insert is disabled '
+                             '(crashes the game). Replace an existing item instead.')
         inv = self._find(self.top, 'inventoryItemList_')
         slot_rec = self._get(inv, str(index))
         if slot_rec is None:
