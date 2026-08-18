@@ -33,9 +33,10 @@ Both are auto-detected.
 4. Click "Save Changes". The first write creates a `save.001.bak` backup
 5. To recover: delete `save.001`, rename `save.001.bak` back
 
-Note: adding items to empty slots is currently disabled (record insertion
-crashes the game on load). To obtain new items, replace an existing item
-(change its ID + count).
+Empty slots are supported. When splicing a new record the editor fixes up
+ancestor container sizes, header offsets, and every t4 pointer's addr field
+(addr encodes the object's stream offset; the loader resolves shared pointers
+through it, so all addrs past the splice point must be shifted).
 
 ## Affection mechanics (reverse engineered from gamedefine)
 

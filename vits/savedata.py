@@ -184,16 +184,12 @@ class SaveData:
         self._patch(val, uid + 1, val['size'])
         return uid
 
-    # 已知问题: 记录插入会导致游戏读档闪退(疑与 t4 addr/偏移一致性校验有关), 默认禁用
-    ALLOW_INSERT = False
-
     def fill_slot(self, index, item_id, count=1, rank=0):
-        """EXPERIMENTAL: splice a new record into an empty slot.
-        Disabled by default - known to crash the game on load."""
-        if not self.ALLOW_INSERT:
-            raise ValueError('空格子添加已禁用(会导致游戏读档闪退)。'
-                             '请改为替换背包中现有物品 / Empty-slot insert is disabled '
-                             '(crashes the game). Replace an existing item instead.')
+        """Splice a new item record into an empty slot.
+        Fixes ancestor sizes, header offsets and ALL t4 pointer addr fields
+        (addr encodes the record's stream offset; the loader treats any
+        mismatch as a back-reference, so every addr >= splice point must be
+        shifted by delta)."""
         inv = self._find(self.top, 'inventoryItemList_')
         slot_rec = self._get(inv, str(index))
         if slot_rec is None:
@@ -211,8 +207,7 @@ class SaveData:
         dlen = 9 + 4 + donor['size']
         blob = bytearray(self.raw[d0:d0 + dlen])
         struct.pack_into('<I', blob, 1, struct.unpack_from('<I', self.raw, slot_rec['off'] + 1)[0])
-        new_addr = (max(a for a in self._all_t4_addrs() if a != 0xffffffff) + 1) & 0xffffffff
-        struct.pack_into('<I', blob, 9, new_addr)
+        struct.pack_into('<I', blob, 9, 0)  # placeholder, fixed to own offset after splice
 
         # splice over the 13-byte null-pointer record
         s0, s1 = slot_rec['off'], slot_rec['off'] + 13
@@ -223,6 +218,17 @@ class SaveData:
         ancestors = self._path_to(slot_rec)
         if ancestors is None:
             raise RuntimeError('内部错误: 找不到记录路径')
+        # collect ALL t4 pointer records BEFORE splice: their addr fields encode
+        # stream offsets (loader uses addr==offset to mean "new object", any
+        # mismatch is treated as a back-reference -> must shift addrs >= s0)
+        t4_offs = []
+        def _walk_t4(recs):
+            for r in recs:
+                if r['type'] == 4:
+                    t4_offs.append((r['off'], r.get('addr', 0)))
+                if 'children' in r:
+                    _walk_t4(r['children'])
+        _walk_t4(self.top)
         # fix ancestor size fields (u32 at off+5)
         for anc in ancestors:
             sz = struct.unpack_from('<I', self.raw, anc['off'] + 5)[0]
@@ -233,6 +239,15 @@ class SaveData:
         struct.pack_into('<I', self.raw, 0x15, sl + delta)
         self.raw[s0:s1] = blob
         del self.raw[len(self.raw) - delta:]  # keep buffer at 20 MiB
+        # shift every t4 addr that referenced an offset at/after the splice point
+        for off, addr in t4_offs:
+            noff = off + delta if off >= s0 else off  # record position after splice
+            if noff == s0:
+                continue  # the record we replaced
+            if addr != 0xffffffff and addr >= s0:
+                struct.pack_into('<I', self.raw, noff + 9, addr + delta)
+        # new record is a fresh object: addr must equal its own offset
+        struct.pack_into('<I', self.raw, s0 + 9, s0)
 
         # reparse (offsets shifted) and patch the new item's fields
         self._parse()
