@@ -1,0 +1,40 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+      - name: Build GUI exe
+        run: pyinstaller --onefile --windowed --name VitsSaveEditor gui.py
+      - name: Build CLI exe
+        run: pyinstaller --onefile --console --name vits-cli cli.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VitsSaveEditor-windows
+          path: |
+            dist/VitsSaveEditor.exe
+            dist/vits-cli.exe
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/VitsSaveEditor.exe
+            dist/vits-cli.exe
+          body: |
+            静谧田园 (Village in the Shade) 存档修改器
+            - VitsSaveEditor.exe: 图形界面版
+            - vits-cli.exe: 命令行版
+            使用前请关闭游戏并备份存档。首次写入会自动生成 save.001.bak。
