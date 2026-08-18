@@ -6,6 +6,9 @@
   python cli.py set-money 999999
   python cli.py set-slot 0 --count 99 --rank 4 --id 20030
   python cli.py find 肥料            # 搜索物品ID
+  python cli.py npc / set-npc 1090 2100 / set-day 76
+
+项目主页 / Project: https://github.com/maosasagawa/village-in-the-shade-save-editor
 """
 import argparse, sys
 
@@ -20,7 +23,7 @@ def name_of(iid):
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(epilog='https://github.com/maosasagawa/village-in-the-shade-save-editor')
     ap.add_argument('cmd', choices=['dump', 'set-money', 'set-slot', 'find', 'npc', 'set-npc', 'set-day'])
     ap.add_argument('args', nargs='*')
     ap.add_argument('--save')

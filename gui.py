@@ -1,161 +1,147 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""静谧田园 (Village in the Shade) 存档修改器 GUI"""
+"""静谧田园 (Village in the Shade) 存档修改器 GUI / Save Editor GUI"""
 import os
+import webbrowser
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from vits.savedata import SaveData, find_saves
 from vits.items_db import ITEMS
-from vits.npcs_db import NPCS, npc_name, love_level
+from vits.npcs_db import NPCS, love_level
+from vits import i18n
+from vits.i18n import T, season_name
 
-RANK_NAMES = {0: '无/铜', 1: '1', 2: '2', 3: '3', 4: '4'}
+
+PROJECT_URL = 'https://github.com/maosasagawa/village-in-the-shade-save-editor'
 
 
 def item_name(iid):
     e = ITEMS.get(iid)
-    return e[0] if e else f'未知物品 {iid}'
+    if not e:
+        return f'? {iid}'
+    return e[0] if i18n.LANG == 'zh' else e[1]
 
 
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title('静谧田园 存档修改器 v1.2  (Village in the Shade)')
-        self.geometry('860x600')
         self.save = None
         self._build()
         self._autoload()
 
+    # ---- UI ----
     def _build(self):
+        for w in self.winfo_children():
+            w.destroy()
+        self.title(T('title'))
+        self.geometry('880x620')
+
         top = ttk.Frame(self); top.pack(fill='x', padx=8, pady=6)
-        ttk.Button(top, text='打开存档...', command=self.open_save).pack(side='left')
-        self.save_combo = ttk.Combobox(top, width=52, state='readonly')
+        ttk.Button(top, text=T('open'), command=self.open_save).pack(side='left')
+        self.save_combo = ttk.Combobox(top, width=46, state='readonly')
         self.save_combo.pack(side='left', padx=6)
         self.save_combo.bind('<<ComboboxSelected>>',
                              lambda e: self.load(self.save_combo.get()))
-        self.path_var = tk.StringVar(value='(未加载)')
-        ttk.Button(top, text='保存修改', command=self.write_save).pack(side='right')
+        self.lang_combo = ttk.Combobox(top, width=8, state='readonly',
+                                       values=['中文', 'English'])
+        self.lang_combo.set('中文' if i18n.LANG == 'zh' else 'English')
+        self.lang_combo.pack(side='right', padx=4)
+        self.lang_combo.bind('<<ComboboxSelected>>', self.on_lang)
+        ttk.Button(top, text=T('save'), command=self.write_save).pack(side='right', padx=4)
 
-        mf = ttk.LabelFrame(self, text='金钱'); mf.pack(fill='x', padx=8, pady=4)
+        mf = ttk.LabelFrame(self, text=T('money')); mf.pack(fill='x', padx=8, pady=4)
         self.money_var = tk.StringVar()
         ttk.Entry(mf, textvariable=self.money_var, width=14).pack(side='left', padx=6, pady=4)
-        ttk.Button(mf, text='应用', command=self.apply_money).pack(side='left')
+        ttk.Button(mf, text=T('apply'), command=self.apply_money).pack(side='left')
 
         nb = ttk.Notebook(self); nb.pack(fill='both', expand=True, padx=8, pady=4)
-        body = ttk.Frame(nb); nb.add(body, text='背包')
-        npctab = ttk.Frame(nb); nb.add(npctab, text='村民好感 / 时间')
+        body = ttk.Frame(nb); nb.add(body, text=T('tab_inv'))
+        npctab = ttk.Frame(nb); nb.add(npctab, text=T('tab_npc'))
+        self._build_inv_tab(body)
         self._build_npc_tab(npctab)
+
+        bottom = ttk.Frame(self); bottom.pack(fill='x', padx=8, pady=4)
+        self.status = tk.StringVar(value=T('hint'))
+        ttk.Label(bottom, textvariable=self.status, foreground='#666').pack(side='left')
+        link = ttk.Label(bottom, text=PROJECT_URL.replace('https://', ''),
+                         foreground='#0066cc', cursor='hand2')
+        link.pack(side='right')
+        link.bind('<Button-1>', lambda e: webbrowser.open(PROJECT_URL))
+
+    def _build_inv_tab(self, body):
         cols = ('slot', 'id', 'name', 'count', 'rank')
-        self.tree = ttk.Treeview(body, columns=cols, show='headings', selectmode='browse')
-        for c, w, t in (('slot', 50, '格'), ('id', 90, '物品ID'), ('name', 320, '名称'),
-                        ('count', 70, '数量'), ('rank', 60, '星级')):
+        tf = ttk.Frame(body); tf.pack(fill='both', expand=True)
+        self.tree = ttk.Treeview(tf, columns=cols, show='headings', selectmode='browse')
+        for c, w, t in (('slot', 50, T('col_slot')), ('id', 90, T('col_id')),
+                        ('name', 320, T('col_name')), ('count', 70, T('col_count')),
+                        ('rank', 60, T('col_rank'))):
             self.tree.heading(c, text=t)
             self.tree.column(c, width=w, anchor='w')
-        vsb = ttk.Scrollbar(body, orient='vertical', command=self.tree.yview)
+        vsb = ttk.Scrollbar(tf, orient='vertical', command=self.tree.yview)
         self.tree.configure(yscrollcommand=vsb.set)
         self.tree.pack(side='left', fill='both', expand=True)
         vsb.pack(side='left', fill='y')
         self.tree.bind('<<TreeviewSelect>>', self.on_select)
 
-        ef = ttk.LabelFrame(self, text='编辑选中格子'); ef.pack(fill='x', padx=8, pady=6)
-        ttk.Label(ef, text='搜索物品:').grid(row=0, column=0, padx=4, pady=4, sticky='e')
+        ef = ttk.LabelFrame(body, text=T('edit_slot')); ef.pack(fill='x', pady=6)
+        ttk.Label(ef, text=T('search_item')).grid(row=0, column=0, padx=4, pady=4, sticky='e')
         self.search_var = tk.StringVar()
         self.search_var.trace_add('write', self.on_search)
         ttk.Entry(ef, textvariable=self.search_var, width=24).grid(row=0, column=1, padx=4)
         self.item_combo = ttk.Combobox(ef, width=44, state='readonly')
         self.item_combo.grid(row=0, column=2, padx=4, columnspan=3, sticky='w')
-        ttk.Label(ef, text='数量:').grid(row=1, column=0, padx=4, sticky='e')
+        ttk.Label(ef, text=T('count')).grid(row=1, column=0, padx=4, sticky='e')
         self.count_var = tk.StringVar()
         ttk.Spinbox(ef, from_=1, to=9999, textvariable=self.count_var, width=8).grid(row=1, column=1, sticky='w', padx=4)
-        ttk.Label(ef, text='星级(0-4):').grid(row=1, column=2, padx=4, sticky='e')
+        ttk.Label(ef, text=T('rank04')).grid(row=1, column=2, padx=4, sticky='e')
         self.rank_var = tk.StringVar()
         ttk.Spinbox(ef, from_=0, to=4, textvariable=self.rank_var, width=6).grid(row=1, column=3, sticky='w', padx=4)
-        ttk.Button(ef, text='应用到格子', command=self.apply_slot).grid(row=1, column=4, padx=10)
+        ttk.Button(ef, text=T('apply_slot'), command=self.apply_slot).grid(row=1, column=4, padx=10)
         self._refresh_combo('')
 
-        self.status = tk.StringVar(value='提示: 修改前请关闭游戏; 首次保存会自动备份 save.001.bak')
-        ttk.Label(self, textvariable=self.status, foreground='#666').pack(fill='x', padx=8, pady=4)
-
     def _build_npc_tab(self, tab):
-        tf = ttk.LabelFrame(tab, text='游戏时间'); tf.pack(fill='x', padx=4, pady=4)
+        tf = ttk.LabelFrame(tab, text=T('game_time')); tf.pack(fill='x', padx=4, pady=4)
         self.day_var = tk.StringVar()
-        ttk.Label(tf, text='第').pack(side='left', padx=(8,2))
+        ttk.Label(tf, text=T('day_pre')).pack(side='left', padx=(8, 2))
         ttk.Entry(tf, textvariable=self.day_var, width=6).pack(side='left')
-        ttk.Label(tf, text='天').pack(side='left', padx=2)
+        ttk.Label(tf, text=T('day_post')).pack(side='left', padx=2)
         self.time_info = tk.StringVar()
         ttk.Label(tf, textvariable=self.time_info, foreground='#666').pack(side='left', padx=10)
-        ttk.Button(tf, text='应用天数', command=self.apply_day).pack(side='right', padx=8)
+        ttk.Button(tf, text=T('apply_day'), command=self.apply_day).pack(side='right', padx=8)
 
         nf = ttk.Frame(tab); nf.pack(fill='both', expand=True, padx=4, pady=4)
         cols = ('id', 'name', 'role', 'love', 'level')
         self.npc_tree = ttk.Treeview(nf, columns=cols, show='headings', selectmode='browse')
-        for c, w, t in (('id', 60, 'ID'), ('name', 120, '名字'), ('role', 120, '身份'),
-                        ('love', 110, '好感度/2100'), ('level', 60, '等级')):
+        for c, w, t in (('id', 60, T('col_npc_id')), ('name', 120, T('col_npc_name')),
+                        ('role', 130, T('col_npc_role')), ('love', 110, T('col_love')),
+                        ('level', 60, T('col_level'))):
             self.npc_tree.heading(c, text=t)
             self.npc_tree.column(c, width=w, anchor='w')
         vsb = ttk.Scrollbar(nf, orient='vertical', command=self.npc_tree.yview)
         self.npc_tree.configure(yscrollcommand=vsb.set)
         self.npc_tree.pack(side='left', fill='both', expand=True)
         vsb.pack(side='left', fill='y')
-        ef = ttk.Frame(tab); ef.pack(fill='x', padx=4, pady=4)
-        ttk.Label(ef, text='好感度 (0-2100, 等级段 100/300/600/1000/1500/2100):').pack(side='left', padx=4)
-        self.love_var = tk.StringVar()
-        ttk.Spinbox(ef, from_=0, to=2100, textvariable=self.love_var, width=8).pack(side='left', padx=4)
-        ttk.Button(ef, text='应用到选中村民', command=self.apply_love).pack(side='left', padx=8)
-        ttk.Button(ef, text='全部拉满', command=self.max_all_love).pack(side='left', padx=8)
         self.npc_tree.bind('<<TreeviewSelect>>', self.on_npc_select)
 
-    def refresh_npcs(self):
-        if not self.save:
-            return
-        self.npc_tree.delete(*self.npc_tree.get_children())
-        for did, lv in self.save.npcs:
-            info = NPCS.get(did, ('?', '?', '?'))
-            v = lv['value']
-            self.npc_tree.insert('', 'end', iid=str(did),
-                                 values=(did, info[0], info[2], v, f'Lv{love_level(v)}'))
-        sec = self.save.game_seconds['value']
-        day = sec // 86400
-        self.day_var.set(str(day))
-        self.time_info.set(f'时刻 {sec%86400//3600:02d}:{sec%86400%3600//60:02d} | '
-                           f'按30天/季: {"春夏秋冬"[day//30%4]}季第{day%30+1}天 | '
-                           f'按28天/季: {"春夏秋冬"[day//28%4]}季第{day%28+1}天')
+        ef = ttk.Frame(tab); ef.pack(fill='x', padx=4, pady=4)
+        ttk.Label(ef, text=T('love_label')).pack(side='left', padx=4)
+        self.love_var = tk.StringVar()
+        ttk.Spinbox(ef, from_=0, to=2100, textvariable=self.love_var, width=8).pack(side='left', padx=4)
+        ttk.Button(ef, text=T('apply_npc'), command=self.apply_love).pack(side='left', padx=8)
+        ttk.Button(ef, text=T('max_all'), command=self.max_all_love).pack(side='left', padx=8)
 
-    def on_npc_select(self, _ev=None):
-        sel = self.npc_tree.selection()
-        if sel and self.save:
-            for did, lv in self.save.npcs:
-                if str(did) == sel[0]:
-                    self.love_var.set(str(lv['value']))
-
-    def apply_love(self):
-        sel = self.npc_tree.selection()
-        if not sel or not self.save:
-            return
-        try:
-            self.save.set_npc_love(int(sel[0]), int(self.love_var.get()))
-        except Exception as e:
-            messagebox.showerror('错误', str(e)); return
-        self.refresh_npcs()
-        self.status.set(f'NPC {sel[0]} 好感度已修改 (记得点“保存修改”)')
-
-    def max_all_love(self):
-        if not self.save:
-            return
-        for did, _lv in self.save.npcs:
-            self.save.set_npc_love(did, 2100)
-        self.refresh_npcs()
-        self.status.set('全部村民好感度已拉满 2100 (记得点“保存修改”)')
-
-    def apply_day(self):
-        if not self.save:
-            return
-        try:
-            self.save.set_game_day(int(self.day_var.get()))
-        except Exception as e:
-            messagebox.showerror('错误', str(e)); return
-        self.refresh_npcs()
-        self.status.set('游戏天数已修改 (记得点“保存修改”)')
+    # ---- language ----
+    def on_lang(self, _ev=None):
+        i18n.set_lang('zh' if self.lang_combo.get() == '中文' else 'en')
+        self._build()
+        saves = find_saves()
+        self.save_combo['values'] = saves
+        if self.save:
+            self.save_combo.set(self.save.path)
+            self.money_var.set(str(self.save.money))
+            self.refresh_tree()
+            self.refresh_npcs()
 
     # ---- data ----
     def _autoload(self):
@@ -167,8 +153,8 @@ class App(tk.Tk):
 
     def open_save(self):
         init = os.path.dirname(find_saves()[0]) if find_saves() else os.path.expanduser('~')
-        p = filedialog.askopenfilename(initialdir=init, title='选择 save.001',
-                                       filetypes=[('存档', 'save.*'), ('所有文件', '*')])
+        p = filedialog.askopenfilename(initialdir=init, title='save.001',
+                                       filetypes=[('save', 'save.*'), ('*', '*')])
         if p:
             self.load(p)
 
@@ -176,24 +162,42 @@ class App(tk.Tk):
         try:
             self.save = SaveData(path)
         except Exception as e:
-            messagebox.showerror('打开失败', str(e))
+            messagebox.showerror(T('open_fail'), str(e))
             return
-        self.path_var.set(path)
         self.money_var.set(str(self.save.money))
         self.refresh_tree()
         self.refresh_npcs()
-        self.status.set(f'已加载: {len(self.save.slots)} 个背包格')
+        self.status.set(T('loaded').format(len(self.save.slots)))
 
     def refresh_tree(self):
         self.tree.delete(*self.tree.get_children())
         for s in self.save.slots:
             if s.empty:
                 self.tree.insert('', 'end', iid=str(s.index),
-                                 values=(s.index, '-', '(空)', '-', '-'))
+                                 values=(s.index, '-', T('empty'), '-', '-'))
             else:
                 self.tree.insert('', 'end', iid=str(s.index),
                                  values=(s.index, s.item_id, item_name(s.item_id),
                                          s.count, s.rank))
+
+    def refresh_npcs(self):
+        if not self.save:
+            return
+        self.npc_tree.delete(*self.npc_tree.get_children())
+        zh = i18n.LANG == 'zh'
+        for did, lv in self.save.npcs:
+            e = NPCS.get(did, ('?', '?', '?', '?'))
+            v = lv['value']
+            self.npc_tree.insert('', 'end', iid=str(did),
+                                 values=(did, e[0] if zh else e[1], e[2] if zh else e[3],
+                                         v, f'Lv{love_level(v)}'))
+        sec = self.save.game_seconds['value']
+        day = sec // 86400
+        self.day_var.set(str(day))
+        self.time_info.set(T('time_info').format(
+            sec % 86400 // 3600, sec % 86400 % 3600 // 60,
+            season_name(day // 30 % 4), day % 30 + 1,
+            season_name(day // 28 % 4), day % 28 + 1))
 
     # ---- events ----
     def on_select(self, _ev=None):
@@ -205,13 +209,12 @@ class App(tk.Tk):
             self.rank_var.set('0')
             self.search_var.set('')
             self.item_combo.set('')
-            self.status.set(f'格 {s.index} 是空的: 搜索并选择物品后点“应用到格子”即可添加')
+            self.status.set(T('slot_empty_hint').format(s.index))
             return
         self.count_var.set(str(s.count))
         self.rank_var.set(str(s.rank))
-        name = item_name(s.item_id)
         self.search_var.set('')
-        self.item_combo.set(f'{s.item_id} {name}')
+        self.item_combo.set(f'{s.item_id} {item_name(s.item_id)}')
 
     def _sel(self):
         sel = self.tree.selection()
@@ -224,12 +227,20 @@ class App(tk.Tk):
 
     def _refresh_combo(self, q):
         vals = []
-        for iid, (zh, en) in ITEMS.items():
-            if not q or q in zh or q.lower() in en.lower() or q == str(iid):
-                vals.append(f'{iid} {zh}')
+        zh = i18n.LANG == 'zh'
+        for iid, (zn, en) in ITEMS.items():
+            if not q or q in zn or q.lower() in en.lower() or q == str(iid):
+                vals.append(f'{iid} {zn if zh else en}')
             if len(vals) >= 300:
                 break
         self.item_combo['values'] = vals
+
+    def on_npc_select(self, _ev=None):
+        sel = self.npc_tree.selection()
+        if sel and self.save:
+            for did, lv in self.save.npcs:
+                if str(did) == sel[0]:
+                    self.love_var.set(str(lv['value']))
 
     # ---- apply ----
     def apply_money(self):
@@ -238,14 +249,14 @@ class App(tk.Tk):
         try:
             self.save.money = int(self.money_var.get())
         except Exception as e:
-            messagebox.showerror('错误', str(e))
+            messagebox.showerror(T('err'), str(e))
             return
-        self.status.set(f'金钱已改为 {self.save.money} (记得点“保存修改”)')
+        self.status.set(T('money_set').format(self.save.money))
 
     def apply_slot(self):
         s = self._sel()
         if not s:
-            messagebox.showinfo('提示', '请先在列表中选中一个格子')
+            messagebox.showinfo(T('notice'), T('pick_slot'))
             return
         try:
             iid = None
@@ -254,7 +265,7 @@ class App(tk.Tk):
                 iid = int(combo.split()[0])
             if s.empty:
                 if iid is None:
-                    messagebox.showinfo('提示', '空格子请先搜索并选择一个物品')
+                    messagebox.showinfo(T('notice'), T('pick_item'))
                     return
                 self.save.fill_slot(s.index, iid,
                                     count=int(self.count_var.get()),
@@ -264,10 +275,41 @@ class App(tk.Tk):
                                    count=int(self.count_var.get()),
                                    rank=int(self.rank_var.get()))
         except Exception as e:
-            messagebox.showerror('错误', str(e))
+            messagebox.showerror(T('err'), str(e))
             return
         self.refresh_tree()
-        self.status.set(f'格 {s.index} 已修改 (记得点“保存修改”)')
+        self.status.set(T('slot_set').format(s.index))
+
+    def apply_love(self):
+        sel = self.npc_tree.selection()
+        if not sel or not self.save:
+            return
+        try:
+            self.save.set_npc_love(int(sel[0]), int(self.love_var.get()))
+        except Exception as e:
+            messagebox.showerror(T('err'), str(e))
+            return
+        self.refresh_npcs()
+        self.status.set(T('love_set').format(sel[0]))
+
+    def max_all_love(self):
+        if not self.save:
+            return
+        for did, _lv in self.save.npcs:
+            self.save.set_npc_love(did, 2100)
+        self.refresh_npcs()
+        self.status.set(T('love_maxed'))
+
+    def apply_day(self):
+        if not self.save:
+            return
+        try:
+            self.save.set_game_day(int(self.day_var.get()))
+        except Exception as e:
+            messagebox.showerror(T('err'), str(e))
+            return
+        self.refresh_npcs()
+        self.status.set(T('day_set'))
 
     def write_save(self):
         if not self.save:
@@ -275,10 +317,9 @@ class App(tk.Tk):
         try:
             self.save.write()
         except Exception as e:
-            messagebox.showerror('保存失败', str(e))
+            messagebox.showerror(T('save_fail'), str(e))
             return
-        messagebox.showinfo('完成', '已写入存档。\n首次修改已自动备份为 save.001.bak\n'
-                            '如出现问题，删除 save.001 并将备份改名恢复即可。')
+        messagebox.showinfo(T('done'), T('saved_msg'))
 
 
 if __name__ == '__main__':

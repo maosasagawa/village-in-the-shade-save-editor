@@ -1,5 +1,7 @@
 # 静谧田园 存档修改器 / Village in the Shade Save Editor
 
+[English README](README_EN.md)
+
 图形界面 + 命令行，修改 Steam 版《静谧田园 / ほのぐらしの庭 / Village in the Shade》(AppID 3934250) 的存档：
 金钱、背包物品（ID / 数量 / 星级）、村民好感度、游戏天数。内置从游戏数据提取的
 2856 条物品数据库（繁中 + 英文名）和 16 位村民资料。
