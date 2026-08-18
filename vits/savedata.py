@@ -244,6 +244,43 @@ class SaveData:
         self._patch(u, uid, u['size'])
         return slot
 
+    # ---- NPC affection ----
+    @property
+    def npcs(self):
+        """[(dataID, loveRate value record), ...]"""
+        lst = self._find(self.top, 'npcStatusList_')
+        out = []
+        for slot in (lst or {}).get('children', []):
+            p = slot['children'][0] if slot.get('children') else None
+            if not p:
+                continue
+            did = self._get(self._get(p, 'pData_'), 'dataID')
+            lv = self._get(self._get(p, 'loveRate_'), 'this->value_')
+            if did and lv:
+                out.append((did['value'], lv))
+        return out
+
+    def set_npc_love(self, npc_id, value):
+        if not 0 <= value <= 2100:
+            raise ValueError('好感度范围 0 ~ 2100')
+        for did, lv in self.npcs:
+            if did == npc_id:
+                self._patch(lv, int(value), lv['size'])
+                return
+        raise ValueError(f'存档中没有 NPC {npc_id}')
+
+    # ---- game time (in-game seconds; 1 day = 86400) ----
+    @property
+    def game_seconds(self):
+        gt = self._find(self.top, 'gameTime_')
+        return self._get(gt, 'second_')
+
+    def set_game_day(self, day):
+        """Set in-game day number (keeps time of day)."""
+        rec = self.game_seconds
+        tod = rec['value'] % 86400
+        self._patch(rec, int(day) * 86400 + tod, rec['size'])
+
     # ---- writing ----
     def write(self, path=None, backup=True):
         path = path or self.path

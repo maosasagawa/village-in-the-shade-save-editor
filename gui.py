@@ -7,6 +7,7 @@ from tkinter import ttk, filedialog, messagebox
 
 from vits.savedata import SaveData, find_saves
 from vits.items_db import ITEMS
+from vits.npcs_db import NPCS, npc_name, love_level
 
 RANK_NAMES = {0: '无/铜', 1: '1', 2: '2', 3: '3', 4: '4'}
 
@@ -19,7 +20,7 @@ def item_name(iid):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title('静谧田园 存档修改器 v1.1  (Village in the Shade)')
+        self.title('静谧田园 存档修改器 v1.2  (Village in the Shade)')
         self.geometry('860x600')
         self.save = None
         self._build()
@@ -40,7 +41,10 @@ class App(tk.Tk):
         ttk.Entry(mf, textvariable=self.money_var, width=14).pack(side='left', padx=6, pady=4)
         ttk.Button(mf, text='应用', command=self.apply_money).pack(side='left')
 
-        body = ttk.Frame(self); body.pack(fill='both', expand=True, padx=8, pady=4)
+        nb = ttk.Notebook(self); nb.pack(fill='both', expand=True, padx=8, pady=4)
+        body = ttk.Frame(nb); nb.add(body, text='背包')
+        npctab = ttk.Frame(nb); nb.add(npctab, text='村民好感 / 时间')
+        self._build_npc_tab(npctab)
         cols = ('slot', 'id', 'name', 'count', 'rank')
         self.tree = ttk.Treeview(body, columns=cols, show='headings', selectmode='browse')
         for c, w, t in (('slot', 50, '格'), ('id', 90, '物品ID'), ('name', 320, '名称'),
@@ -72,6 +76,87 @@ class App(tk.Tk):
         self.status = tk.StringVar(value='提示: 修改前请关闭游戏; 首次保存会自动备份 save.001.bak')
         ttk.Label(self, textvariable=self.status, foreground='#666').pack(fill='x', padx=8, pady=4)
 
+    def _build_npc_tab(self, tab):
+        tf = ttk.LabelFrame(tab, text='游戏时间'); tf.pack(fill='x', padx=4, pady=4)
+        self.day_var = tk.StringVar()
+        ttk.Label(tf, text='第').pack(side='left', padx=(8,2))
+        ttk.Entry(tf, textvariable=self.day_var, width=6).pack(side='left')
+        ttk.Label(tf, text='天').pack(side='left', padx=2)
+        self.time_info = tk.StringVar()
+        ttk.Label(tf, textvariable=self.time_info, foreground='#666').pack(side='left', padx=10)
+        ttk.Button(tf, text='应用天数', command=self.apply_day).pack(side='right', padx=8)
+
+        nf = ttk.Frame(tab); nf.pack(fill='both', expand=True, padx=4, pady=4)
+        cols = ('id', 'name', 'role', 'love', 'level')
+        self.npc_tree = ttk.Treeview(nf, columns=cols, show='headings', selectmode='browse')
+        for c, w, t in (('id', 60, 'ID'), ('name', 120, '名字'), ('role', 120, '身份'),
+                        ('love', 110, '好感度/2100'), ('level', 60, '等级')):
+            self.npc_tree.heading(c, text=t)
+            self.npc_tree.column(c, width=w, anchor='w')
+        vsb = ttk.Scrollbar(nf, orient='vertical', command=self.npc_tree.yview)
+        self.npc_tree.configure(yscrollcommand=vsb.set)
+        self.npc_tree.pack(side='left', fill='both', expand=True)
+        vsb.pack(side='left', fill='y')
+        ef = ttk.Frame(tab); ef.pack(fill='x', padx=4, pady=4)
+        ttk.Label(ef, text='好感度 (0-2100, 等级段 100/300/600/1000/1500/2100):').pack(side='left', padx=4)
+        self.love_var = tk.StringVar()
+        ttk.Spinbox(ef, from_=0, to=2100, textvariable=self.love_var, width=8).pack(side='left', padx=4)
+        ttk.Button(ef, text='应用到选中村民', command=self.apply_love).pack(side='left', padx=8)
+        ttk.Button(ef, text='全部拉满', command=self.max_all_love).pack(side='left', padx=8)
+        self.npc_tree.bind('<<TreeviewSelect>>', self.on_npc_select)
+
+    def refresh_npcs(self):
+        if not self.save:
+            return
+        self.npc_tree.delete(*self.npc_tree.get_children())
+        for did, lv in self.save.npcs:
+            info = NPCS.get(did, ('?', '?', '?'))
+            v = lv['value']
+            self.npc_tree.insert('', 'end', iid=str(did),
+                                 values=(did, info[0], info[2], v, f'Lv{love_level(v)}'))
+        sec = self.save.game_seconds['value']
+        day = sec // 86400
+        self.day_var.set(str(day))
+        self.time_info.set(f'时刻 {sec%86400//3600:02d}:{sec%86400%3600//60:02d} | '
+                           f'按30天/季: {"春夏秋冬"[day//30%4]}季第{day%30+1}天 | '
+                           f'按28天/季: {"春夏秋冬"[day//28%4]}季第{day%28+1}天')
+
+    def on_npc_select(self, _ev=None):
+        sel = self.npc_tree.selection()
+        if sel and self.save:
+            for did, lv in self.save.npcs:
+                if str(did) == sel[0]:
+                    self.love_var.set(str(lv['value']))
+
+    def apply_love(self):
+        sel = self.npc_tree.selection()
+        if not sel or not self.save:
+            return
+        try:
+            self.save.set_npc_love(int(sel[0]), int(self.love_var.get()))
+        except Exception as e:
+            messagebox.showerror('错误', str(e)); return
+        self.refresh_npcs()
+        self.status.set(f'NPC {sel[0]} 好感度已修改 (记得点“保存修改”)')
+
+    def max_all_love(self):
+        if not self.save:
+            return
+        for did, _lv in self.save.npcs:
+            self.save.set_npc_love(did, 2100)
+        self.refresh_npcs()
+        self.status.set('全部村民好感度已拉满 2100 (记得点“保存修改”)')
+
+    def apply_day(self):
+        if not self.save:
+            return
+        try:
+            self.save.set_game_day(int(self.day_var.get()))
+        except Exception as e:
+            messagebox.showerror('错误', str(e)); return
+        self.refresh_npcs()
+        self.status.set('游戏天数已修改 (记得点“保存修改”)')
+
     # ---- data ----
     def _autoload(self):
         saves = find_saves()
@@ -96,6 +181,7 @@ class App(tk.Tk):
         self.path_var.set(path)
         self.money_var.set(str(self.save.money))
         self.refresh_tree()
+        self.refresh_npcs()
         self.status.set(f'已加载: {len(self.save.slots)} 个背包格')
 
     def refresh_tree(self):

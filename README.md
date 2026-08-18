@@ -1,7 +1,14 @@
 # 静谧田园 存档修改器 / Village in the Shade Save Editor
 
 图形界面 + 命令行，修改 Steam 版《静谧田园 / ほのぐらしの庭 / Village in the Shade》(AppID 3934250) 的存档：
-金钱、背包物品（ID / 数量 / 星级），内置从游戏数据提取的 2856 条物品数据库（繁中 + 英文名）。
+金钱、背包物品（ID / 数量 / 星级）、村民好感度、游戏天数。内置从游戏数据提取的
+2856 条物品数据库（繁中 + 英文名）和 16 位村民资料。
+
+## 好感度机制（逆向自 gamedefine）
+
+- 等级段上限：Lv1=100, Lv2=300, Lv3=600, Lv4=1000, Lv5=1500, Lv6(满)=2100
+- 增长：对话 +10 / 完成委托 +30 / 对话选项成功 +30
+- 每级触发对应剧情旗标 `GAME_FLAG_<角色>_LOVE_LEVELn`
 
 ## 下载
 
@@ -38,6 +45,9 @@ vits-cli dump                          # 查看金钱与背包
 vits-cli find 肥料                     # 搜索物品ID (肥料=20010 优质=20020 高级=20030)
 vits-cli set-money 999999
 vits-cli set-slot 0 --id 20030 --count 99 --rank 4
+vits-cli npc                           # 查看村民好感度和游戏时间
+vits-cli set-npc 1090 2100             # 修改好感度
+vits-cli set-day 76                    # 修改游戏天数(时刻保留)
 ```
 
 ## 存档格式（逆向笔记）
