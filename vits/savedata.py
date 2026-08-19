@@ -370,7 +370,9 @@ class SaveData:
         comp = lz4_compress(bytes(self.raw))
         blob = b'YKCMP_V1' + struct.pack('<III', 8, len(comp) + 0x14, len(self.raw)) + comp
         if len(blob) > self.filesize:
-            raise ValueError('压缩后大小超过原文件，拒绝写入')
+            raise ValueError(
+                '压缩后大小超过原文件，拒绝写入 (缺少 lz4 库? pip install lz4) / '
+                'compressed size exceeds original file (missing lz4 module? pip install lz4)')
         blob += b'\0' * (self.filesize - len(blob))
         if backup and os.path.exists(path):
             bak = path + '.bak'

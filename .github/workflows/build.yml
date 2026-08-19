@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install PyInstaller
-        run: pip install pyinstaller
+        run: pip install pyinstaller lz4
       - name: Build GUI exe
         run: pyinstaller --onefile --windowed --name VitsSaveEditor gui.py
       - name: Build CLI exe

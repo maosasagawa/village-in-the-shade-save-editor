@@ -2,6 +2,12 @@
 """YKCMP_V1 (NIS) save (de)compressor. Type 8 = raw LZ4 block."""
 import struct, sys
 
+try:
+    import lz4.block as _lz4_block
+except ImportError:  # pure-python fallback still works, just compresses worse
+    _lz4_block = None
+
+
 def lz4_decompress(src, expected=None):
     dst = bytearray()
     i, n = 0, len(src)
@@ -29,6 +35,16 @@ def lz4_decompress(src, expected=None):
     return bytes(dst)
 
 def lz4_compress(src):
+    # Prefer the real LZ4 library (raw block, high compression) -- required for
+    # long-play saves whose data would not fit the fixed file size with the
+    # fallback literal+zero-RLE encoder below.
+    if _lz4_block is not None:
+        return _lz4_block.compress(bytes(src), mode='high_compression',
+                                   store_size=False)
+    return _lz4_compress_fallback(src)
+
+
+def _lz4_compress_fallback(src):
     # Valid LZ4 block: real data as literals, trailing zero-fill as RLE match
     # (offset=1). Final sequence is literal-only per spec.
     end = len(src)
