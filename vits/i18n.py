@@ -4,8 +4,8 @@
 LANG = 'zh'  # default
 
 STRINGS = {
-    'title': {'zh': '静谧田园 存档修改器 v1.2  (Village in the Shade)',
-              'en': 'Village in the Shade Save Editor v1.2'},
+    'title': {'zh': '静谧田园 存档修改器 v1.3  (Village in the Shade)',
+              'en': 'Village in the Shade Save Editor v1.3'},
     'open': {'zh': '打开存档...', 'en': 'Open Save...'},
     'save': {'zh': '保存修改', 'en': 'Save Changes'},
     'money': {'zh': '金钱', 'en': 'Money'},
