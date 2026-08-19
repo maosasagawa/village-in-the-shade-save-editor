@@ -291,6 +291,67 @@ class SaveData:
                 return
         raise ValueError(f'存档中没有 NPC {npc_id}')
 
+    # ---- livestock (farm animals incl. dog) ----
+    @property
+    def livestock(self):
+        """[{'index', 'species', 'name', 'love', 'mood', 'grow'}, ...]
+        love/mood are value records patchable in place."""
+        lst = self._find(self.top, 'livestockList_')
+        out = []
+        for slot in (lst or {}).get('children', []):
+            p = slot['children'][0] if slot.get('children') else None
+            if not p:
+                continue
+            d = self._get(self._get(p, 'pData_'), 'dataID')
+            love = self._get(self._get(p, 'loveRate_'), 'this->value_')
+            mood = self._get(self._get(p, 'moodRate_'), 'this->value_')
+            grow = self._get(p, 'growStatus_')
+            nm = self._get(p, 'name_')
+            name = nm.get('value', '') if nm else ''
+            if d and love:
+                out.append({'index': len(out), 'species': d['value'], 'name': name,
+                            'love': love, 'mood': mood, 'grow': grow})
+        return out
+
+    def set_livestock_love(self, index, value):
+        if not 0 <= value <= 2000:
+            raise ValueError('家畜好感度范围 0 ~ 2000 (鸡等小动物上限 1500)')
+        animals = self.livestock
+        if not 0 <= index < len(animals):
+            raise ValueError(f'没有第 {index} 只家畜')
+        rec = animals[index]['love']
+        self._patch(rec, int(value), rec['size'])
+
+    def set_livestock_mood(self, index, value):
+        if not 0 <= value <= 100:
+            raise ValueError('心情范围 0 ~ 100')
+        animals = self.livestock
+        rec = animals[index]['mood']
+        self._patch(rec, int(value), rec['size'])
+
+    # ---- creature likeability (wild animals: cats, birds...) ----
+    @property
+    def creatures(self):
+        """[(creatureID, likeability value record), ...] (save stores x100)."""
+        lst = self._find(self.top, 'creatureLikeabilityList_')
+        kids = (lst or {}).get('children', [])
+        out = []
+        for i in range(0, len(kids) - 1, 2):
+            k, v = kids[i], kids[i + 1]
+            if 'value' in k and 'value' in v:
+                out.append((k['value'], v))
+        return out
+
+    def set_creature_like(self, creature_id, value):
+        """value: 0-12000 (in-game 0-120 x100)."""
+        if not 0 <= value <= 12000:
+            raise ValueError('生物好感度范围 0 ~ 12000 (游戏内 0~120 的 100 倍)')
+        for cid, rec in self.creatures:
+            if cid == creature_id:
+                self._patch(rec, int(value), rec['size'])
+                return
+        raise ValueError(f'存档中没有生物 {creature_id}')
+
     # ---- game time (in-game seconds; 1 day = 86400) ----
     @property
     def game_seconds(self):

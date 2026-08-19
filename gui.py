@@ -9,6 +9,7 @@ from tkinter import ttk, filedialog, messagebox
 from vits.savedata import SaveData, find_saves
 from vits.items_db import ITEMS
 from vits.npcs_db import NPCS, love_level
+from vits.animals_db import livestock_name, creature_name, CATS
 from vits import i18n
 from vits.i18n import T, season_name
 
@@ -58,8 +59,10 @@ class App(tk.Tk):
         nb = ttk.Notebook(self); nb.pack(fill='both', expand=True, padx=8, pady=4)
         body = ttk.Frame(nb); nb.add(body, text=T('tab_inv'))
         npctab = ttk.Frame(nb); nb.add(npctab, text=T('tab_npc'))
+        animtab = ttk.Frame(nb); nb.add(animtab, text=T('tab_animal'))
         self._build_inv_tab(body)
         self._build_npc_tab(npctab)
+        self._build_animal_tab(animtab)
 
         bottom = ttk.Frame(self); bottom.pack(fill='x', padx=8, pady=4)
         self.status = tk.StringVar(value=T('hint'))
@@ -131,6 +134,40 @@ class App(tk.Tk):
         ttk.Button(ef, text=T('apply_npc'), command=self.apply_love).pack(side='left', padx=8)
         ttk.Button(ef, text=T('max_all'), command=self.max_all_love).pack(side='left', padx=8)
 
+    def _build_animal_tab(self, tab):
+        lf = ttk.LabelFrame(tab, text=T('sect_livestock')); lf.pack(fill='both', expand=True, padx=4, pady=4)
+        cols = ('no', 'species', 'name', 'love', 'mood')
+        self.anim_tree = ttk.Treeview(lf, columns=cols, show='headings',
+                                      selectmode='browse', height=7)
+        for c, w, t in (('no', 40, T('col_animal_no')), ('species', 160, T('col_species')),
+                        ('name', 120, T('col_animal_name')), ('love', 110, T('col_animal_love')),
+                        ('mood', 70, T('col_mood'))):
+            self.anim_tree.heading(c, text=t)
+            self.anim_tree.column(c, width=w, anchor='w')
+        self.anim_tree.pack(side='top', fill='both', expand=True)
+        self.anim_tree.bind('<<TreeviewSelect>>', self.on_animal_select)
+        af = ttk.Frame(lf); af.pack(fill='x', pady=3)
+        self.anim_love_var = tk.StringVar()
+        ttk.Spinbox(af, from_=0, to=2000, textvariable=self.anim_love_var, width=8).pack(side='left', padx=6)
+        ttk.Button(af, text=T('apply_animal'), command=self.apply_animal).pack(side='left', padx=4)
+        ttk.Button(af, text=T('max_all_animal'), command=self.max_all_animals).pack(side='left', padx=4)
+
+        cf = ttk.LabelFrame(tab, text=T('sect_creature')); cf.pack(fill='both', expand=True, padx=4, pady=4)
+        ccols = ('id', 'creature', 'like')
+        self.crea_tree = ttk.Treeview(cf, columns=ccols, show='headings',
+                                      selectmode='browse', height=7)
+        for c, w, t in (('id', 100, 'ID'), ('creature', 200, T('col_creature')),
+                        ('like', 120, T('col_like'))):
+            self.crea_tree.heading(c, text=t)
+            self.crea_tree.column(c, width=w, anchor='w')
+        self.crea_tree.pack(side='top', fill='both', expand=True)
+        self.crea_tree.bind('<<TreeviewSelect>>', self.on_creature_select)
+        bf = ttk.Frame(cf); bf.pack(fill='x', pady=3)
+        self.crea_like_var = tk.StringVar()
+        ttk.Spinbox(bf, from_=0, to=12000, textvariable=self.crea_like_var, width=8).pack(side='left', padx=6)
+        ttk.Button(bf, text=T('apply_creature'), command=self.apply_creature).pack(side='left', padx=4)
+        ttk.Button(bf, text=T('max_all_cat'), command=self.max_all_cats).pack(side='left', padx=4)
+
     # ---- language ----
     def on_lang(self, _ev=None):
         i18n.set_lang('zh' if self.lang_combo.get() == '中文' else 'en')
@@ -142,6 +179,7 @@ class App(tk.Tk):
             self.money_var.set(str(self.save.money))
             self.refresh_tree()
             self.refresh_npcs()
+            self.refresh_animals()
 
     # ---- data ----
     def _autoload(self):
@@ -167,6 +205,7 @@ class App(tk.Tk):
         self.money_var.set(str(self.save.money))
         self.refresh_tree()
         self.refresh_npcs()
+        self.refresh_animals()
         self.status.set(T('loaded').format(len(self.save.slots)))
 
     def refresh_tree(self):
@@ -198,6 +237,24 @@ class App(tk.Tk):
             sec % 86400 // 3600, sec % 86400 % 3600 // 60,
             season_name(day // 30 % 4), day % 30 + 1,
             season_name(day // 28 % 4), day % 28 + 1))
+
+    def refresh_animals(self):
+        if not self.save:
+            return
+        lang = i18n.LANG
+        self.anim_tree.delete(*self.anim_tree.get_children())
+        for an in self.save.livestock:
+            mood = an['mood']['value'] if an['mood'] else '-'
+            self.anim_tree.insert('', 'end', iid=str(an['index']),
+                                  values=(an['index'], livestock_name(an['species'], lang),
+                                          an['name'], an['love']['value'], mood))
+        self.crea_tree.delete(*self.crea_tree.get_children())
+        rows = [(cid, rec) for cid, rec in self.save.creatures
+                if rec['value'] or cid in CATS]
+        rows.sort(key=lambda t: (t[0] not in CATS, -t[1]['value']))
+        for cid, rec in rows:
+            self.crea_tree.insert('', 'end', iid=str(cid),
+                                  values=(cid, creature_name(cid, lang), rec['value']))
 
     # ---- events ----
     def on_select(self, _ev=None):
@@ -241,6 +298,19 @@ class App(tk.Tk):
             for did, lv in self.save.npcs:
                 if str(did) == sel[0]:
                     self.love_var.set(str(lv['value']))
+
+    def on_animal_select(self, _ev=None):
+        sel = self.anim_tree.selection()
+        if sel and self.save:
+            an = self.save.livestock[int(sel[0])]
+            self.anim_love_var.set(str(an['love']['value']))
+
+    def on_creature_select(self, _ev=None):
+        sel = self.crea_tree.selection()
+        if sel and self.save:
+            for cid, rec in self.save.creatures:
+                if str(cid) == sel[0]:
+                    self.crea_like_var.set(str(rec['value']))
 
     # ---- apply ----
     def apply_money(self):
@@ -299,6 +369,50 @@ class App(tk.Tk):
             self.save.set_npc_love(did, 2100)
         self.refresh_npcs()
         self.status.set(T('love_maxed'))
+
+    def apply_animal(self):
+        sel = self.anim_tree.selection()
+        if not sel or not self.save:
+            return
+        try:
+            self.save.set_livestock_love(int(sel[0]), int(self.anim_love_var.get()))
+        except Exception as e:
+            messagebox.showerror(T('err'), str(e))
+            return
+        self.refresh_animals()
+        self.status.set(T('animal_set').format(sel[0]))
+
+    def max_all_animals(self):
+        if not self.save:
+            return
+        # 小动物(鸡鸭火鸡类 1-6,19-25,30)上限 1500, 其余 2000
+        small = set(range(1, 7)) | set(range(19, 26)) | {30}
+        for an in self.save.livestock:
+            cap = 1500 if an['species'] in small else 2000
+            self.save.set_livestock_love(an['index'], cap)
+        self.refresh_animals()
+        self.status.set(T('animal_maxed'))
+
+    def apply_creature(self):
+        sel = self.crea_tree.selection()
+        if not sel or not self.save:
+            return
+        try:
+            self.save.set_creature_like(int(sel[0]), int(self.crea_like_var.get()))
+        except Exception as e:
+            messagebox.showerror(T('err'), str(e))
+            return
+        self.refresh_animals()
+        self.status.set(T('creature_set').format(sel[0]))
+
+    def max_all_cats(self):
+        if not self.save:
+            return
+        for cid, _rec in self.save.creatures:
+            if cid in CATS:
+                self.save.set_creature_like(cid, 12000)
+        self.refresh_animals()
+        self.status.set(T('cat_maxed'))
 
     def apply_day(self):
         if not self.save:

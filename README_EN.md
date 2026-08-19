@@ -4,10 +4,11 @@
 
 GUI + CLI save editor for the Steam release of *Village in the Shade /
 ほのぐらしの庭 / 静谧田园* (AppID 3934250): money, inventory items
-(ID / count / star rank), villager affection, in-game day. Ships with an item
-database (2,856 entries, Traditional Chinese + English) and villager data
-extracted from the game files. GUI defaults to Chinese — switch to English
-via the dropdown in the top-right corner.
+(ID / count / star rank), villager affection, livestock affection, wild
+animal / cat likeability, in-game day. Ships with an item database
+(2,856 entries, Traditional Chinese + English), 16 villagers, 28 livestock
+species and 247 creatures extracted from the game files. GUI defaults to
+Chinese — switch to English via the dropdown in the top-right corner.
 
 ## Download
 
@@ -38,11 +39,37 @@ ancestor container sizes, header offsets, and every t4 pointer's addr field
 (addr encodes the object's stream offset; the loader resolves shared pointers
 through it, so all addrs past the splice point must be shifted).
 
-## Affection mechanics (reverse engineered from gamedefine)
+## Affection mechanics (reverse engineered from gamedefine / characterpresent.dat / village.exe)
 
 - Tier caps: Lv1=100, Lv2=300, Lv3=600, Lv4=1000, Lv5=1500, Lv6 (max)=2100
 - Gains: talk +10 / quest complete +30 / dialogue choice success +30
 - Each tier fires a story flag `GAME_FLAG_<ROLE>_LOVE_LEVELn`
+
+### Gifts
+
+| Reaction | Normal day | Birthday |
+|----------|-----------|----------|
+| Liked gift (4 items per villager) | +25 | +50 |
+| Neutral gift | +15 | +30 |
+| Disliked gift (4 items per villager) | +5 | +10 |
+
+- Star-rank bonus (liked gifts only): ★1 ×1.1, ★2 ×1.2, ★3 ×1.35, ★4 ×1.5
+  (a ★4 liked gift on a birthday = 75 points)
+- Limits: 1 gift per villager per day, 2 per week (resets Monday); special
+  story items bypass the weekly limit but give no affection (they trigger
+  unique events instead)
+- Each villager's liked/disliked items and birthday are listed in the
+  Chinese README's table (data from `character.dat` / `characterpresent.dat`)
+
+### Livestock & cats
+
+- Livestock (`livestockList_`): affection 0–2000 (small animals such as
+  chickens cap at 1500), plus a mood value 0–100
+- Wild animals (`creatureLikeabilityList_`): in-game likeability 0–120,
+  stored ×100 in the save (0–12000); petting +3, feeding +4 (needs ≥30 to
+  feed, ≥60 to pet; 30 per gauge bar)
+- 7 cats total: Ginger, White, Black, Mask-and-Mantle, Calico, Fluffy,
+  and Coco the pet cat
 
 ## CLI examples
 
@@ -54,6 +81,9 @@ vits-cli set-slot 0 --id 20030 --count 99 --rank 4
 vits-cli npc                  # villager affection + game time
 vits-cli set-npc 1090 2100
 vits-cli set-day 76
+vits-cli animals              # livestock + cat likeability
+vits-cli set-animal 0 2000    # livestock by index from `animals`
+vits-cli set-cat all 12000    # max all cats (or pass a creature ID)
 ```
 
 ## File format notes
