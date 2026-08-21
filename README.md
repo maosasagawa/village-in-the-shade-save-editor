@@ -132,5 +132,7 @@ vits-cli copy-save 3 en --horror-on --replace  # 覆盖槽3，英语+正常模�
 
 ## 许可证
 
+Copyright (C) 2026 maosasagawa
+
 本项目自行编写的源代码采用 [GNU General Public License v3.0 only](LICENSE)
 （GPL-3.0-only）发布。游戏名称、商标及从游戏文件提取的数据仍归其各自权利人所有。

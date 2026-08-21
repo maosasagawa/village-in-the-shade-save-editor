@@ -133,6 +133,8 @@ backups. Not affiliated with Nippon Ichi Software.
 
 ## License
 
+Copyright (C) 2026 maosasagawa
+
 Project-authored source code is licensed under the
 [GNU General Public License v3.0 only](LICENSE) (GPL-3.0-only). Game names,
 trademarks, and data extracted from game files remain the property of their
