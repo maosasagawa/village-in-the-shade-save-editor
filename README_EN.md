@@ -6,7 +6,8 @@ GUI + CLI save editor for the Steam release of *Village in the Shade /
 ほのぐらしの庭 / 静谧田园* (AppID 3934250): money, inventory items
 (ID / count / star rank), villager affection, livestock affection, wild
 animal / cat likeability, in-game day, and per-save game language by cloning
-the selected save into another official slot. Ships with an item database
+the selected save into another official slot, including normal/horror-off
+mode selection. Ships with an item database
 (2,856 entries, Traditional Chinese + English), 16 villagers, 28 livestock
 species and 247 creatures extracted from the game files. GUI defaults to
 Chinese — switch to English via the dropdown in the top-right corner.
@@ -36,12 +37,13 @@ Both are auto-detected.
 4. Click "Save Changes". The first write creates a `save.001.bak` backup
 5. To recover: delete `save.001`, rename `save.001.bak` back
 
-### Save language / copy
+### Save language, mode / copy
 
 The game fixes its language per save. The editor copies the currently selected
 save into a target slot, then updates both the target save's language flags and
 the `save.lst` preview `languageID`. Japanese, English, French, Spanish,
-Traditional Chinese and Korean are available.
+Traditional Chinese and Korean are available, together with Normal Horror Mode
+and Horror-Off Mode.
 
 - Official slot numbers: slot 1=`save.001`, slot 2=`save.006`, slot 3=`save.011`
   (five file numbers are reserved per slot)
@@ -49,6 +51,9 @@ Traditional Chinese and Korean are available.
 - The target save and `save.lst` are backed up before replacement; if `.bak`
   exists, a new timestamped backup is created
 - **Fully close the game first**, or the game may overwrite the files on exit
+- Mode updates both `GAME_FLAG_HORROR_OFF_MODE` and the list preview
+  `isHororOffMode`. Switching a progressed save may repeat/skip story events or
+  desync flags; test mode changes only in a copied slot
 
 Empty slots are supported. When splicing a new record the editor fixes up
 ancestor container sizes, header offsets, and every t4 pointer's addr field
@@ -101,8 +106,8 @@ vits-cli animals              # livestock + cat likeability
 vits-cli set-animal 0 2000    # livestock by index from `animals`
 vits-cli set-cat all 12000    # max all cats (or pass a creature ID)
 vits-cli saves                # list official saves indexed by save.lst
-vits-cli copy-language 2 jp   # copy selected/default save to empty slot 2 in Japanese
-vits-cli copy-language 3 en --replace
+vits-cli copy-save 2 jp --horror-off
+vits-cli copy-save 3 en --horror-on --replace
 ```
 
 ## File format notes

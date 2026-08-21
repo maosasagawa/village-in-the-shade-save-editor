@@ -182,11 +182,12 @@ class App(tk.Tk):
 
         sf = ttk.LabelFrame(tab, text=T('language_slots'))
         sf.pack(fill='both', expand=True, padx=6, pady=4)
-        cols = ('slot', 'file', 'language', 'status')
+        cols = ('slot', 'file', 'language', 'mode', 'status')
         self.slot_tree = ttk.Treeview(sf, columns=cols, show='headings', height=6)
         for col, width, title in (('slot', 80, T('col_save_slot')),
                                   ('file', 130, T('col_save_file')),
-                                  ('language', 180, T('col_save_language')),
+                                  ('language', 150, T('col_save_language')),
+                                  ('mode', 150, T('col_game_mode')),
                                   ('status', 140, T('col_save_status'))):
             self.slot_tree.heading(col, text=title)
             self.slot_tree.column(col, width=width, anchor='w')
@@ -208,9 +209,15 @@ class App(tk.Tk):
         self.game_language_combo.grid(row=0, column=3, padx=4, sticky='w')
         self.game_language_combo.current(0)
         ttk.Button(controls, text=T('copy_language'),
-                   command=self.copy_language_slot).grid(row=0, column=4, padx=10)
+                   command=self.copy_language_slot).grid(row=0, column=4, rowspan=2, padx=10)
+        ttk.Label(controls, text=T('target_mode')).grid(row=1, column=0, padx=6, pady=7, sticky='e')
+        self.game_mode_combo = ttk.Combobox(
+            controls, state='readonly', width=24,
+            values=[T('mode_normal'), T('mode_horror_off')])
+        self.game_mode_combo.grid(row=1, column=1, columnspan=3, padx=4, sticky='w')
+        self.game_mode_combo.current(0)
         ttk.Label(controls, text=T('language_warning'), foreground='#8a5a00').grid(
-            row=1, column=0, columnspan=5, padx=8, pady=(0, 7), sticky='w')
+            row=2, column=0, columnspan=5, padx=8, pady=(0, 7), sticky='w')
 
     # ---- language ----
     def on_lang(self, _ev=None):
@@ -236,14 +243,18 @@ class App(tk.Tk):
                 if directory not in list_cache:
                     listing = SaveList(os.path.join(directory, 'save.lst'))
                     list_cache[directory] = {
-                        entry.number: entry.language_id for entry in listing.entries}
-                language_id = list_cache[directory].get(number)
+                        entry.number: (entry.language_id, entry.horror_off)
+                        for entry in listing.entries}
+                language_id, horror_off = list_cache[directory].get(number, (None, False))
                 info = LANGUAGE_BY_ID.get(language_id)
                 if info:
                     language = info[1 if i18n.LANG == 'zh' else 2]
             except Exception:
+                horror_off = False
                 pass
-            labels.append(T('save_choice').format(slot or '?', os.path.basename(path), language))
+            mode = T('mode_horror_off') if horror_off else T('mode_normal')
+            labels.append(T('save_choice').format(
+                slot or '?', os.path.basename(path), language, mode))
         self.save_combo['values'] = labels
         if not self.save_paths:
             self.save_combo.set('')
@@ -286,8 +297,9 @@ class App(tk.Tk):
         source_slot = slot_for_number(number)
         info = LANGUAGE_BY_ID.get(self.save.game_language)
         language = info[1 if i18n.LANG == 'zh' else 2] if info else '?'
+        mode = T('mode_horror_off') if self.save.horror_off else T('mode_normal')
         self.language_source_var.set(T('source_info').format(
-            source_slot or '?', os.path.basename(self.save.path), language))
+            source_slot or '?', os.path.basename(self.save.path), language, mode))
         self.slot_tree.delete(*self.slot_tree.get_children())
         try:
             listing = SaveList(os.path.join(os.path.dirname(self.save.path), 'save.lst'))
@@ -299,12 +311,15 @@ class App(tk.Tk):
             if entry:
                 item = LANGUAGE_BY_ID.get(entry.language_id)
                 lang = item[1 if i18n.LANG == 'zh' else 2] if item else f'ID {entry.language_id}'
-                values = (slot, f'save.{entry.number:03d}', lang, T('occupied'))
+                entry_mode = T('mode_horror_off') if entry.horror_off else T('mode_normal')
+                values = (slot, f'save.{entry.number:03d}', lang,
+                          entry_mode, T('occupied'))
             else:
-                values = (slot, '-', '-', T('available'))
+                values = (slot, '-', '-', '-', T('available'))
             self.slot_tree.insert('', 'end', iid=str(slot), values=values)
         default_target = 2 if source_slot == 1 else 1
         self.target_slot_combo.current(default_target - 1)
+        self.game_mode_combo.current(1 if self.save.horror_off else 0)
 
     def refresh_tree(self):
         self.tree.delete(*self.tree.get_children())
@@ -520,10 +535,14 @@ class App(tk.Tk):
         if language_index < 0:
             return
         language_code = self.language_codes[language_index]
+        horror_off = self.game_mode_combo.current() == 1
         source_slot = slot_for_number(save_number(self.save.path))
         if source_slot == target_slot:
             messagebox.showerror(T('err'), T('same_slot'))
             return
+        if horror_off != self.save.horror_off:
+            if not messagebox.askyesno(T('mode_risk_title'), T('mode_risk')):
+                return
         try:
             listing = SaveList(os.path.join(os.path.dirname(self.save.path), 'save.lst'))
             occupied = listing.current_slots().get(target_slot)
@@ -541,7 +560,7 @@ class App(tk.Tk):
             # Include any edits already applied in this session before cloning.
             self.save.write()
             target = copy_to_slot(self.save.path, target_slot, language_code,
-                                  replace=replace)
+                                  replace=replace, horror_off=horror_off)
         except SlotOccupiedError as exc:
             messagebox.showerror(T('err'), str(exc))
             return

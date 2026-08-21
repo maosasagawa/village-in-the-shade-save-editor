@@ -303,32 +303,53 @@ class SaveData:
         raise ValueError(f'存档中没有 NPC {npc_id}')
 
     # ---- language fixed to this save slot ----
-    @property
-    def game_language(self):
-        """Internal language ID: JP=0, EN=1, FR=2, ES=3, TC=4, KO=5."""
+    def _flag_data_offset(self):
         outer = self._find(self.top, 'flags_')
         inner = self._get(outer, 'flags_')
         if not inner:
-            return None
-        off = inner['off'] + 13
-        flags = bytes(self.raw[off:off + inner['size']])
+            raise ValueError('存档中没有游戏旗标')
+        return inner['off'] + 13, inner['size']
+
+    def _get_game_flag(self, flag_id):
+        off, size = self._flag_data_offset()
+        if flag_id // 8 >= size:
+            raise ValueError(f'游戏旗标 {flag_id} 超出存档范围')
+        return bool(self.raw[off + flag_id // 8] & (1 << (flag_id % 8)))
+
+    def _set_game_flag(self, flag_id, enabled):
+        off, size = self._flag_data_offset()
+        if flag_id // 8 >= size:
+            raise ValueError(f'游戏旗标 {flag_id} 超出存档范围')
+        mask = 1 << (flag_id % 8)
+        if enabled:
+            self.raw[off + flag_id // 8] |= mask
+        else:
+            self.raw[off + flag_id // 8] &= ~mask
+
+    @property
+    def game_language(self):
+        """Internal language ID: JP=0, EN=1, FR=2, ES=3, TC=4, KO=5."""
         for flag_id, language_id in ((40, 0), (41, 1), (42, 2), (43, 3),
                                      (45, 4), (46, 5)):
-            if flags[flag_id // 8] & (1 << (flag_id % 8)):
+            if self._get_game_flag(flag_id):
                 return language_id
 
     def set_game_language(self, language_id):
         flag_ids = {0: 40, 1: 41, 2: 42, 3: 43, 4: 45, 5: 46}
         if language_id not in flag_ids:
             raise ValueError('语言 ID 范围 0 ~ 5 (日/英/法/西/繁中/韩)')
-        outer = self._find(self.top, 'flags_')
-        inner = self._get(outer, 'flags_')
-        if not inner:
-            raise ValueError('存档中没有语言旗标')
-        off = inner['off'] + 13
+        off, _size = self._flag_data_offset()
         # Language flags 40..46 occupy bits 0..6 of byte 5.
         self.raw[off + 5] = ((self.raw[off + 5] & 0x80)
                              | (1 << (flag_ids[language_id] - 40)))
+
+    @property
+    def horror_off(self):
+        """Whether GAME_FLAG_HORROR_OFF_MODE (ID 399) is enabled."""
+        return self._get_game_flag(399)
+
+    def set_horror_off(self, enabled):
+        self._set_game_flag(399, bool(enabled))
 
     # ---- livestock (farm animals incl. dog) ----
     @property

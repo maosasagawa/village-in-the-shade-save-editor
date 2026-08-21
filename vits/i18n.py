@@ -4,8 +4,8 @@
 LANG = 'zh'  # default
 
 STRINGS = {
-    'title': {'zh': '静谧田园 存档修改器 v1.4  (Village in the Shade)',
-              'en': 'Village in the Shade Save Editor v1.4'},
+    'title': {'zh': '静谧田园 存档修改器 v1.5  (Village in the Shade)',
+              'en': 'Village in the Shade Save Editor v1.5'},
     'open': {'zh': '打开存档...', 'en': 'Open Save...'},
     'save': {'zh': '保存修改', 'en': 'Save Changes'},
     'money': {'zh': '金钱', 'en': 'Money'},
@@ -86,15 +86,19 @@ STRINGS = {
     'col_save_slot': {'zh': '槽位', 'en': 'Slot'},
     'col_save_file': {'zh': '文件', 'en': 'File'},
     'col_save_language': {'zh': '游戏语言', 'en': 'Game Language'},
+    'col_game_mode': {'zh': '游戏模式', 'en': 'Game Mode'},
     'col_save_status': {'zh': '状态', 'en': 'Status'},
     'target_slot': {'zh': '目标槽位:', 'en': 'Target slot:'},
     'target_language': {'zh': '目标语言:', 'en': 'Target language:'},
+    'target_mode': {'zh': '目标模式:', 'en': 'Target mode:'},
+    'mode_normal': {'zh': '正常恐怖模式', 'en': 'Normal Horror Mode'},
+    'mode_horror_off': {'zh': '关闭恐怖模式', 'en': 'Horror-Off Mode'},
     'slot_n': {'zh': '槽位 {}', 'en': 'Slot {}'},
     'copy_language': {'zh': '复制到目标槽位', 'en': 'Copy to Target Slot'},
-    'language_warning': {'zh': '修改前请完全关闭游戏。目标槽已有存档时会要求确认替换。',
-                         'en': 'Close the game first. Replacing an occupied slot requires confirmation.'},
-    'save_choice': {'zh': '槽 {} | {} | {}', 'en': 'Slot {} | {} | {}'},
-    'source_info': {'zh': '槽 {} | {} | {}', 'en': 'Slot {} | {} | {}'},
+    'language_warning': {'zh': '修改前请完全关闭游戏。切换已推进存档的模式可能造成剧情旗标不一致。',
+                         'en': 'Close the game first. Changing mode on a progressed save may desync story flags.'},
+    'save_choice': {'zh': '槽 {} | {} | {} | {}', 'en': 'Slot {} | {} | {} | {}'},
+    'source_info': {'zh': '槽 {} | {} | {} | {}', 'en': 'Slot {} | {} | {} | {}'},
     'occupied': {'zh': '已占用', 'en': 'Occupied'},
     'available': {'zh': '空闲', 'en': 'Available'},
     'confirm_replace_title': {'zh': '确认替换存档', 'en': 'Confirm Save Replacement'},
@@ -104,6 +108,9 @@ STRINGS = {
                            'en': 'Copied to slot {} ({}) and set the game language.'},
     'same_slot': {'zh': '源存档和目标槽位不能相同',
                   'en': 'Source and target slots must be different'},
+    'mode_risk_title': {'zh': '游戏模式风险', 'en': 'Game Mode Risk'},
+    'mode_risk': {'zh': '切换已推进存档的游戏模式，可能导致剧情事件重复、跳过或旗标不一致。\n仍要复制并切换吗？',
+                  'en': 'Changing mode on a progressed save may repeat or skip story events, or desync flags.\nContinue copying and switching mode?'},
 }
 
 

@@ -8,7 +8,7 @@
   python cli.py find 肥料            # 搜索物品ID
   python cli.py npc / set-npc 1090 2100 / set-day 76
   python cli.py animals / set-animal 0 2000 / set-cat all 12000
-  python cli.py saves / copy-language 2 jp --replace
+  python cli.py saves / copy-save 2 jp --horror-off --replace
 
 项目主页 / Project: https://github.com/maosasagawa/village-in-the-shade-save-editor
 """
@@ -31,13 +31,16 @@ def main():
     ap = argparse.ArgumentParser(epilog='https://github.com/maosasagawa/village-in-the-shade-save-editor')
     ap.add_argument('cmd', choices=['dump', 'set-money', 'set-slot', 'find', 'npc', 'set-npc',
                                     'set-day', 'animals', 'set-animal', 'set-cat',
-                                    'saves', 'copy-language'])
+                                    'saves', 'copy-language', 'copy-save'])
     ap.add_argument('args', nargs='*')
     ap.add_argument('--save')
     ap.add_argument('--count', type=int)
     ap.add_argument('--rank', type=int)
     ap.add_argument('--id', type=int)
     ap.add_argument('--replace', action='store_true')
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument('--horror-off', action='store_true')
+    mode.add_argument('--horror-on', action='store_true')
     a = ap.parse_args()
 
     if a.cmd == 'find':
@@ -57,12 +60,14 @@ def main():
             print(f'槽 {slot_for_number(save_number(save_path))}: '
                   f'{save_path} [{info[1]} / {info[2]}]')
         return
-    if a.cmd == 'copy-language':
+    if a.cmd in ('copy-language', 'copy-save'):
         if len(a.args) < 2:
-            sys.exit('用法: copy-language <目标槽1-3> <jp|en|fr|es|tc|ko> [--replace]')
+            sys.exit('用法: copy-save <目标槽1-3> <jp|en|fr|es|tc|ko> '
+                     '[--horror-off|--horror-on] [--replace]')
+        horror_off = True if a.horror_off else (False if a.horror_on else None)
         try:
             target = copy_to_slot(path, int(a.args[0]), a.args[1].lower(),
-                                  replace=a.replace)
+                                  replace=a.replace, horror_off=horror_off)
         except SlotOccupiedError:
             sys.exit('目标槽已有存档；确认要覆盖时加 --replace')
         print(f'已复制到 {target}，语言={a.args[1].lower()}')

@@ -51,22 +51,39 @@ class SaveListEntry:
 
     @property
     def language_id(self):
+        return self._extra_value('languageID')
+
+    @property
+    def horror_off(self):
+        return bool(self._extra_value('isHororOffMode'))
+
+    def _extra_record(self, name):
         ser = Ser(self.extra)
         top = []
         ser.parse(0x19, 0x19 + ser.stream_len, out=top)
-        rec = next((item for item in top if item['name'] == 'languageID'), None)
+        return next((item for item in top if item['name'] == name), None)
+
+    def _extra_value(self, name):
+        rec = self._extra_record(name)
         return rec['value'] if rec else None
 
-    def set_language(self, language_id):
+    def _set_extra_value(self, name, value):
         raw = bytearray(self.extra)
         ser = Ser(bytes(raw))
         top = []
         ser.parse(0x19, 0x19 + ser.stream_len, out=top)
-        rec = next((item for item in top if item['name'] == 'languageID'), None)
-        if not rec or rec['size'] != 4:
-            raise ValueError('save.lst entry has no languageID')
-        struct.pack_into('<i', raw, rec['off'] + 9, language_id)
+        rec = next((item for item in top if item['name'] == name), None)
+        if not rec or rec['size'] not in (1, 4):
+            raise ValueError(f'save.lst entry has no {name}')
+        struct.pack_into({1: '<b', 4: '<i'}[rec['size']], raw,
+                         rec['off'] + 9, value)
         self.extra = bytes(raw)
+
+    def set_language(self, language_id):
+        self._set_extra_value('languageID', language_id)
+
+    def set_horror_off(self, enabled):
+        self._set_extra_value('isHororOffMode', int(bool(enabled)))
 
     def serialize(self):
         return (struct.pack('<IIII', self.number, self.date, self.time,
@@ -74,12 +91,14 @@ class SaveListEntry:
                 + struct.pack('<I', len(self.second)) + self.second
                 + struct.pack('<I', len(self.extra)) + self.extra)
 
-    def clone(self, number, language_id):
+    def clone(self, number, language_id, horror_off=None):
         now = datetime.now()
         entry = SaveListEntry(number, int(now.strftime('%Y%m%d')),
                               int(now.strftime('%H%M%S')), self.title,
                               self.second, self.extra)
         entry.set_language(language_id)
+        if horror_off is not None:
+            entry.set_horror_off(horror_off)
         return entry
 
 
@@ -168,7 +187,8 @@ def _backup(path):
     return candidate
 
 
-def copy_to_slot(source_path, target_slot, language_code, replace=False):
+def copy_to_slot(source_path, target_slot, language_code, replace=False,
+                 horror_off=None):
     """Clone an indexed save into another official slot and set its language."""
     from .savedata import SaveData
 
@@ -201,11 +221,14 @@ def copy_to_slot(source_path, target_slot, language_code, replace=False):
         shutil.copy2(source_path, target_path)
         target_save = SaveData(target_path)
         target_save.set_game_language(language_id)
+        if horror_off is not None:
+            target_save.set_horror_off(horror_off)
         target_save.write(backup=False)
 
         listing.entries = [entry for entry in listing.entries
                            if entry.slot != target_slot]
-        listing.entries.append(source_entry.clone(target_number, language_id))
+        listing.entries.append(source_entry.clone(target_number, language_id,
+                                                  horror_off))
         listing.entries.sort(key=lambda entry: entry.number)
         listing.write(backup=False)
     except Exception:
