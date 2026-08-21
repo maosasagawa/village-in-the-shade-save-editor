@@ -5,7 +5,8 @@
 GUI + CLI save editor for the Steam release of *Village in the Shade /
 ほのぐらしの庭 / 静谧田园* (AppID 3934250): money, inventory items
 (ID / count / star rank), villager affection, livestock affection, wild
-animal / cat likeability, in-game day. Ships with an item database
+animal / cat likeability, in-game day, and per-save game language by cloning
+the selected save into another official slot. Ships with an item database
 (2,856 entries, Traditional Chinese + English), 16 villagers, 28 livestock
 species and 247 creatures extracted from the game files. GUI defaults to
 Chinese — switch to English via the dropdown in the top-right corner.
@@ -29,10 +30,25 @@ Both are auto-detected.
 ## Usage
 
 1. **Close the game** (consider temporarily disabling Steam Cloud for it)
-2. Open the editor; it auto-loads `save.001` (or pick one manually)
+2. Open the editor; it reads `save.lst`, lists official saves, selects the first,
+   and lets you switch saves from the top dropdown
 3. Edit money / items (count 1–9999, rank 0–4) / villager affection / game day
 4. Click "Save Changes". The first write creates a `save.001.bak` backup
 5. To recover: delete `save.001`, rename `save.001.bak` back
+
+### Save language / copy
+
+The game fixes its language per save. The editor copies the currently selected
+save into a target slot, then updates both the target save's language flags and
+the `save.lst` preview `languageID`. Japanese, English, French, Spanish,
+Traditional Chinese and Korean are available.
+
+- Official slot numbers: slot 1=`save.001`, slot 2=`save.006`, slot 3=`save.011`
+  (five file numbers are reserved per slot)
+- Empty targets are created directly; the GUI asks before replacing occupied slots
+- The target save and `save.lst` are backed up before replacement; if `.bak`
+  exists, a new timestamped backup is created
+- **Fully close the game first**, or the game may overwrite the files on exit
 
 Empty slots are supported. When splicing a new record the editor fixes up
 ancestor container sizes, header offsets, and every t4 pointer's addr field
@@ -84,12 +100,17 @@ vits-cli set-day 76
 vits-cli animals              # livestock + cat likeability
 vits-cli set-animal 0 2000    # livestock by index from `animals`
 vits-cli set-cat all 12000    # max all cats (or pass a creature ID)
+vits-cli saves                # list official saves indexed by save.lst
+vits-cli copy-language 2 jp   # copy selected/default save to empty slot 2 in Japanese
+vits-cli copy-language 3 en --replace
 ```
 
 ## File format notes
 
 - Outer container `YKCMP_V1`, type 8 = raw LZ4 block, decompresses to a fixed
   20 MiB buffer
+- `save.lst` uses YKCMP type 4 and stores official file numbers, timestamps and
+  an ExtraData SER preview containing `languageID`
 - Inner `SER` serialization tree: `[type u8][name-offset u32][size u32][data]`
   with a string table at the tail; types: 0 leaf, 1 array, 2 object, 3 map,
   4 pointer, 5 string

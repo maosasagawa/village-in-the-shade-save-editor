@@ -7,6 +7,9 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from vits.savedata import SaveData, find_saves
+from vits.savelist import (LANGUAGES, LANGUAGE_BY_ID, SaveList,
+                           SlotOccupiedError, copy_to_slot, save_number,
+                           slot_for_number)
 from vits.items_db import ITEMS
 from vits.npcs_db import NPCS, love_level
 from vits.animals_db import livestock_name, creature_name, CATS
@@ -28,6 +31,8 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.save = None
+        self.save_paths = []
+        self.language_codes = list(LANGUAGES)
         self._build()
         self._autoload()
 
@@ -36,14 +41,13 @@ class App(tk.Tk):
         for w in self.winfo_children():
             w.destroy()
         self.title(T('title'))
-        self.geometry('880x620')
+        self.geometry('920x650')
 
         top = ttk.Frame(self); top.pack(fill='x', padx=8, pady=6)
         ttk.Button(top, text=T('open'), command=self.open_save).pack(side='left')
         self.save_combo = ttk.Combobox(top, width=46, state='readonly')
         self.save_combo.pack(side='left', padx=6)
-        self.save_combo.bind('<<ComboboxSelected>>',
-                             lambda e: self.load(self.save_combo.get()))
+        self.save_combo.bind('<<ComboboxSelected>>', self.on_save_select)
         self.lang_combo = ttk.Combobox(top, width=8, state='readonly',
                                        values=['中文', 'English'])
         self.lang_combo.set('中文' if i18n.LANG == 'zh' else 'English')
@@ -60,9 +64,11 @@ class App(tk.Tk):
         body = ttk.Frame(nb); nb.add(body, text=T('tab_inv'))
         npctab = ttk.Frame(nb); nb.add(npctab, text=T('tab_npc'))
         animtab = ttk.Frame(nb); nb.add(animtab, text=T('tab_animal'))
+        langtab = ttk.Frame(nb); nb.add(langtab, text=T('tab_language'))
         self._build_inv_tab(body)
         self._build_npc_tab(npctab)
         self._build_animal_tab(animtab)
+        self._build_language_tab(langtab)
 
         bottom = ttk.Frame(self); bottom.pack(fill='x', padx=8, pady=4)
         self.status = tk.StringVar(value=T('hint'))
@@ -168,32 +174,96 @@ class App(tk.Tk):
         ttk.Button(bf, text=T('apply_creature'), command=self.apply_creature).pack(side='left', padx=4)
         ttk.Button(bf, text=T('max_all_cat'), command=self.max_all_cats).pack(side='left', padx=4)
 
+    def _build_language_tab(self, tab):
+        source = ttk.LabelFrame(tab, text=T('language_source'))
+        source.pack(fill='x', padx=6, pady=6)
+        self.language_source_var = tk.StringVar(value=T('not_loaded'))
+        ttk.Label(source, textvariable=self.language_source_var).pack(anchor='w', padx=8, pady=6)
+
+        sf = ttk.LabelFrame(tab, text=T('language_slots'))
+        sf.pack(fill='both', expand=True, padx=6, pady=4)
+        cols = ('slot', 'file', 'language', 'status')
+        self.slot_tree = ttk.Treeview(sf, columns=cols, show='headings', height=6)
+        for col, width, title in (('slot', 80, T('col_save_slot')),
+                                  ('file', 130, T('col_save_file')),
+                                  ('language', 180, T('col_save_language')),
+                                  ('status', 140, T('col_save_status'))):
+            self.slot_tree.heading(col, text=title)
+            self.slot_tree.column(col, width=width, anchor='w')
+        self.slot_tree.pack(fill='both', expand=True)
+
+        controls = ttk.LabelFrame(tab, text=T('language_copy'))
+        controls.pack(fill='x', padx=6, pady=6)
+        ttk.Label(controls, text=T('target_slot')).grid(row=0, column=0, padx=6, pady=7, sticky='e')
+        self.target_slot_combo = ttk.Combobox(
+            controls, state='readonly', width=15,
+            values=[T('slot_n').format(i) for i in range(1, 4)])
+        self.target_slot_combo.grid(row=0, column=1, padx=4, sticky='w')
+        self.target_slot_combo.current(1)
+        ttk.Label(controls, text=T('target_language')).grid(row=0, column=2, padx=6, sticky='e')
+        self.game_language_combo = ttk.Combobox(
+            controls, state='readonly', width=24,
+            values=[LANGUAGES[code][2 if i18n.LANG == 'zh' else 3]
+                    for code in self.language_codes])
+        self.game_language_combo.grid(row=0, column=3, padx=4, sticky='w')
+        self.game_language_combo.current(0)
+        ttk.Button(controls, text=T('copy_language'),
+                   command=self.copy_language_slot).grid(row=0, column=4, padx=10)
+        ttk.Label(controls, text=T('language_warning'), foreground='#8a5a00').grid(
+            row=1, column=0, columnspan=5, padx=8, pady=(0, 7), sticky='w')
+
     # ---- language ----
     def on_lang(self, _ev=None):
+        current = self.save.path if self.save else None
         i18n.set_lang('zh' if self.lang_combo.get() == '中文' else 'en')
         self._build()
-        saves = find_saves()
-        self.save_combo['values'] = saves
-        if self.save:
-            self.save_combo.set(self.save.path)
-            self.money_var.set(str(self.save.money))
-            self.refresh_tree()
-            self.refresh_npcs()
-            self.refresh_animals()
+        self._scan_saves(current)
 
     # ---- data ----
     def _autoload(self):
-        saves = find_saves()
-        self.save_combo['values'] = saves
-        if saves:
-            self.save_combo.set(saves[0])
-            self.load(saves[0])
+        self._scan_saves()
+
+    def _scan_saves(self, preferred=None):
+        self.save_paths = find_saves()
+        labels = []
+        list_cache = {}
+        for path in self.save_paths:
+            number = save_number(path)
+            slot = slot_for_number(number)
+            language = '?'
+            try:
+                directory = os.path.dirname(path)
+                if directory not in list_cache:
+                    listing = SaveList(os.path.join(directory, 'save.lst'))
+                    list_cache[directory] = {
+                        entry.number: entry.language_id for entry in listing.entries}
+                language_id = list_cache[directory].get(number)
+                info = LANGUAGE_BY_ID.get(language_id)
+                if info:
+                    language = info[1 if i18n.LANG == 'zh' else 2]
+            except Exception:
+                pass
+            labels.append(T('save_choice').format(slot or '?', os.path.basename(path), language))
+        self.save_combo['values'] = labels
+        if not self.save_paths:
+            self.save_combo.set('')
+            return
+        index = self.save_paths.index(preferred) if preferred in self.save_paths else 0
+        self.save_combo.current(index)
+        self.load(self.save_paths[index])
+
+    def on_save_select(self, _ev=None):
+        index = self.save_combo.current()
+        if 0 <= index < len(self.save_paths):
+            self.load(self.save_paths[index])
 
     def open_save(self):
         init = os.path.dirname(find_saves()[0]) if find_saves() else os.path.expanduser('~')
         p = filedialog.askopenfilename(initialdir=init, title='save.001',
                                        filetypes=[('save', 'save.*'), ('*', '*')])
         if p:
+            if p not in self.save_paths:
+                self.save_paths.append(p)
             self.load(p)
 
     def load(self, path):
@@ -206,7 +276,35 @@ class App(tk.Tk):
         self.refresh_tree()
         self.refresh_npcs()
         self.refresh_animals()
+        self.refresh_language_slots()
         self.status.set(T('loaded').format(len(self.save.slots)))
+
+    def refresh_language_slots(self):
+        if not self.save:
+            return
+        number = save_number(self.save.path)
+        source_slot = slot_for_number(number)
+        info = LANGUAGE_BY_ID.get(self.save.game_language)
+        language = info[1 if i18n.LANG == 'zh' else 2] if info else '?'
+        self.language_source_var.set(T('source_info').format(
+            source_slot or '?', os.path.basename(self.save.path), language))
+        self.slot_tree.delete(*self.slot_tree.get_children())
+        try:
+            listing = SaveList(os.path.join(os.path.dirname(self.save.path), 'save.lst'))
+            slots = listing.current_slots()
+        except Exception:
+            slots = {}
+        for slot in range(1, 4):
+            entry = slots.get(slot)
+            if entry:
+                item = LANGUAGE_BY_ID.get(entry.language_id)
+                lang = item[1 if i18n.LANG == 'zh' else 2] if item else f'ID {entry.language_id}'
+                values = (slot, f'save.{entry.number:03d}', lang, T('occupied'))
+            else:
+                values = (slot, '-', '-', T('available'))
+            self.slot_tree.insert('', 'end', iid=str(slot), values=values)
+        default_target = 2 if source_slot == 1 else 1
+        self.target_slot_combo.current(default_target - 1)
 
     def refresh_tree(self):
         self.tree.delete(*self.tree.get_children())
@@ -413,6 +511,46 @@ class App(tk.Tk):
                 self.save.set_creature_like(cid, 12000)
         self.refresh_animals()
         self.status.set(T('cat_maxed'))
+
+    def copy_language_slot(self):
+        if not self.save:
+            return
+        target_slot = self.target_slot_combo.current() + 1
+        language_index = self.game_language_combo.current()
+        if language_index < 0:
+            return
+        language_code = self.language_codes[language_index]
+        source_slot = slot_for_number(save_number(self.save.path))
+        if source_slot == target_slot:
+            messagebox.showerror(T('err'), T('same_slot'))
+            return
+        try:
+            listing = SaveList(os.path.join(os.path.dirname(self.save.path), 'save.lst'))
+            occupied = listing.current_slots().get(target_slot)
+        except Exception as exc:
+            messagebox.showerror(T('err'), str(exc))
+            return
+        replace = False
+        if occupied:
+            replace = messagebox.askyesno(
+                T('confirm_replace_title'),
+                T('confirm_replace').format(target_slot, f'save.{occupied.number:03d}'))
+            if not replace:
+                return
+        try:
+            # Include any edits already applied in this session before cloning.
+            self.save.write()
+            target = copy_to_slot(self.save.path, target_slot, language_code,
+                                  replace=replace)
+        except SlotOccupiedError as exc:
+            messagebox.showerror(T('err'), str(exc))
+            return
+        except Exception as exc:
+            messagebox.showerror(T('save_fail'), str(exc))
+            return
+        self._scan_saves(target)
+        messagebox.showinfo(T('done'), T('language_copy_done').format(
+            target_slot, os.path.basename(target)))
 
     def apply_day(self):
         if not self.save:

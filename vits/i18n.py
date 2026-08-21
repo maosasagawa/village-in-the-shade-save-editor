@@ -4,8 +4,8 @@
 LANG = 'zh'  # default
 
 STRINGS = {
-    'title': {'zh': '静谧田园 存档修改器 v1.3  (Village in the Shade)',
-              'en': 'Village in the Shade Save Editor v1.3'},
+    'title': {'zh': '静谧田园 存档修改器 v1.4  (Village in the Shade)',
+              'en': 'Village in the Shade Save Editor v1.4'},
     'open': {'zh': '打开存档...', 'en': 'Open Save...'},
     'save': {'zh': '保存修改', 'en': 'Save Changes'},
     'money': {'zh': '金钱', 'en': 'Money'},
@@ -79,6 +79,31 @@ STRINGS = {
     'creature_set': {'zh': '生物 {} 好感已修改 (记得点“保存修改”)', 'en': 'Creature {} updated (remember to Save Changes)'},
     'animal_maxed': {'zh': '全部家畜好感已拉满 (记得点“保存修改”)', 'en': 'All livestock maxed (remember to Save Changes)'},
     'cat_maxed': {'zh': '全部猫咪好感已拉满 12000 (记得点“保存修改”)', 'en': 'All cats maxed to 12000 (remember to Save Changes)'},
+    'tab_language': {'zh': '存档语言 / 复制', 'en': 'Save Language / Copy'},
+    'language_source': {'zh': '当前源存档', 'en': 'Current Source Save'},
+    'language_slots': {'zh': '正式存档槽位', 'en': 'Official Save Slots'},
+    'language_copy': {'zh': '复制当前存档并设置语言', 'en': 'Copy Current Save and Set Language'},
+    'col_save_slot': {'zh': '槽位', 'en': 'Slot'},
+    'col_save_file': {'zh': '文件', 'en': 'File'},
+    'col_save_language': {'zh': '游戏语言', 'en': 'Game Language'},
+    'col_save_status': {'zh': '状态', 'en': 'Status'},
+    'target_slot': {'zh': '目标槽位:', 'en': 'Target slot:'},
+    'target_language': {'zh': '目标语言:', 'en': 'Target language:'},
+    'slot_n': {'zh': '槽位 {}', 'en': 'Slot {}'},
+    'copy_language': {'zh': '复制到目标槽位', 'en': 'Copy to Target Slot'},
+    'language_warning': {'zh': '修改前请完全关闭游戏。目标槽已有存档时会要求确认替换。',
+                         'en': 'Close the game first. Replacing an occupied slot requires confirmation.'},
+    'save_choice': {'zh': '槽 {} | {} | {}', 'en': 'Slot {} | {} | {}'},
+    'source_info': {'zh': '槽 {} | {} | {}', 'en': 'Slot {} | {} | {}'},
+    'occupied': {'zh': '已占用', 'en': 'Occupied'},
+    'available': {'zh': '空闲', 'en': 'Available'},
+    'confirm_replace_title': {'zh': '确认替换存档', 'en': 'Confirm Save Replacement'},
+    'confirm_replace': {'zh': '槽位 {} 已有 {}。\n确定用当前存档覆盖吗？\n原文件会自动备份为 .bak。',
+                        'en': 'Slot {} already contains {}.\nReplace it with the current save?\nThe original is backed up as .bak.'},
+    'language_copy_done': {'zh': '已复制到槽位 {}（{}）并设置游戏语言。',
+                           'en': 'Copied to slot {} ({}) and set the game language.'},
+    'same_slot': {'zh': '源存档和目标槽位不能相同',
+                  'en': 'Source and target slots must be different'},
 }
 
 

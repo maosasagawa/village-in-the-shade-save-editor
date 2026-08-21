@@ -8,7 +8,7 @@ File format:
     4 pointer(+u32 addr), 5 string(+u32 len)
 Only fixed-size leaf values are patched in place, so no size fixups needed.
 """
-import os, shutil, struct
+import os, re, shutil, struct
 
 from .ykcmp import lz4_compress, lz4_decompress
 from .ser import Ser
@@ -27,12 +27,23 @@ def default_save_dirs():
 
 
 def find_saves():
-    """Return list of save.* files found in default locations."""
+    """Return active, indexed save files; never include backups/test files."""
     out = []
     for d in default_save_dirs():
         for root, _dirs, files in os.walk(d):
+            if 'save.lst' in files:
+                try:
+                    from .savelist import SaveList
+                    listing = SaveList(os.path.join(root, 'save.lst'))
+                    for _slot, entry in sorted(listing.current_slots().items()):
+                        path = os.path.join(root, f'save.{entry.number:03d}')
+                        if os.path.isfile(path):
+                            out.append(path)
+                    continue
+                except Exception:
+                    pass
             for fn in sorted(files):
-                if fn.startswith('save.') and fn != 'save.lst':
+                if re.fullmatch(r'save\.\d{3}', fn):
                     out.append(os.path.join(root, fn))
     return out
 
@@ -290,6 +301,34 @@ class SaveData:
                 self._patch(lv, int(value), lv['size'])
                 return
         raise ValueError(f'存档中没有 NPC {npc_id}')
+
+    # ---- language fixed to this save slot ----
+    @property
+    def game_language(self):
+        """Internal language ID: JP=0, EN=1, FR=2, ES=3, TC=4, KO=5."""
+        outer = self._find(self.top, 'flags_')
+        inner = self._get(outer, 'flags_')
+        if not inner:
+            return None
+        off = inner['off'] + 13
+        flags = bytes(self.raw[off:off + inner['size']])
+        for flag_id, language_id in ((40, 0), (41, 1), (42, 2), (43, 3),
+                                     (45, 4), (46, 5)):
+            if flags[flag_id // 8] & (1 << (flag_id % 8)):
+                return language_id
+
+    def set_game_language(self, language_id):
+        flag_ids = {0: 40, 1: 41, 2: 42, 3: 43, 4: 45, 5: 46}
+        if language_id not in flag_ids:
+            raise ValueError('语言 ID 范围 0 ~ 5 (日/英/法/西/繁中/韩)')
+        outer = self._find(self.top, 'flags_')
+        inner = self._get(outer, 'flags_')
+        if not inner:
+            raise ValueError('存档中没有语言旗标')
+        off = inner['off'] + 13
+        # Language flags 40..46 occupy bits 0..6 of byte 5.
+        self.raw[off + 5] = ((self.raw[off + 5] & 0x80)
+                             | (1 << (flag_ids[language_id] - 40)))
 
     # ---- livestock (farm animals incl. dog) ----
     @property

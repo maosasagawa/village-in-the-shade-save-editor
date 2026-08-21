@@ -8,6 +8,7 @@
   python cli.py find 肥料            # 搜索物品ID
   python cli.py npc / set-npc 1090 2100 / set-day 76
   python cli.py animals / set-animal 0 2000 / set-cat all 12000
+  python cli.py saves / copy-language 2 jp --replace
 
 项目主页 / Project: https://github.com/maosasagawa/village-in-the-shade-save-editor
 """
@@ -17,6 +18,8 @@ from vits.savedata import SaveData, find_saves
 from vits.items_db import ITEMS
 from vits.npcs_db import npc_name, love_level, LOVE_LEVEL_MAX
 from vits.animals_db import livestock_name, creature_name, CATS
+from vits.savelist import (LANGUAGE_BY_ID, SlotOccupiedError, copy_to_slot,
+                           save_number, slot_for_number)
 
 
 def name_of(iid):
@@ -27,12 +30,14 @@ def name_of(iid):
 def main():
     ap = argparse.ArgumentParser(epilog='https://github.com/maosasagawa/village-in-the-shade-save-editor')
     ap.add_argument('cmd', choices=['dump', 'set-money', 'set-slot', 'find', 'npc', 'set-npc',
-                                    'set-day', 'animals', 'set-animal', 'set-cat'])
+                                    'set-day', 'animals', 'set-animal', 'set-cat',
+                                    'saves', 'copy-language'])
     ap.add_argument('args', nargs='*')
     ap.add_argument('--save')
     ap.add_argument('--count', type=int)
     ap.add_argument('--rank', type=int)
     ap.add_argument('--id', type=int)
+    ap.add_argument('--replace', action='store_true')
     a = ap.parse_args()
 
     if a.cmd == 'find':
@@ -45,6 +50,23 @@ def main():
     path = a.save or (find_saves() or [None])[0]
     if not path:
         sys.exit('找不到存档，请用 --save 指定')
+    if a.cmd == 'saves':
+        for save_path in find_saves():
+            data = SaveData(save_path)
+            info = LANGUAGE_BY_ID.get(data.game_language, ('?', '?', '?'))
+            print(f'槽 {slot_for_number(save_number(save_path))}: '
+                  f'{save_path} [{info[1]} / {info[2]}]')
+        return
+    if a.cmd == 'copy-language':
+        if len(a.args) < 2:
+            sys.exit('用法: copy-language <目标槽1-3> <jp|en|fr|es|tc|ko> [--replace]')
+        try:
+            target = copy_to_slot(path, int(a.args[0]), a.args[1].lower(),
+                                  replace=a.replace)
+        except SlotOccupiedError:
+            sys.exit('目标槽已有存档；确认要覆盖时加 --replace')
+        print(f'已复制到 {target}，语言={a.args[1].lower()}')
+        return
     sd = SaveData(path)
     print(f'存档: {path}')
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""YKCMP_V1 (NIS) save (de)compressor. Type 8 = raw LZ4 block."""
+"""YKCMP_V1 (NIS) save (de)compressor. Types 4 and 8."""
 import struct, sys
 
 try:
@@ -33,6 +33,118 @@ def lz4_decompress(src, expected=None):
             dst.append(dst[pos]); pos += 1
         if expected and len(dst) >= expected: break
     return bytes(dst)
+
+
+def type4_decompress(src, expected):
+    """Decode the original YKCMP LZ codec used by save.lst."""
+    out = bytearray()
+    pos = 0
+    while pos < len(src) and len(out) < expected:
+        opcode = src[pos]
+        pos += 1
+        if opcode < 0x80:
+            length = opcode
+            if pos + length > len(src):
+                raise ValueError('YKCMP type 4 literal exceeds input')
+            out.extend(src[pos:pos + length])
+            pos += length
+            continue
+        if opcode < 0xc0:
+            length = ((opcode >> 4) & 3) + 1
+            distance = (opcode & 15) + 1
+        elif opcode < 0xe0:
+            if pos >= len(src):
+                raise ValueError('truncated YKCMP type 4 back-reference')
+            length = opcode - 0xc0 + 2
+            distance = src[pos] + 1
+            pos += 1
+        else:
+            if pos + 2 > len(src):
+                raise ValueError('truncated YKCMP type 4 long back-reference')
+            arg1, arg2 = src[pos], src[pos + 1]
+            pos += 2
+            length = ((opcode - 0xe0) << 4) + (arg1 >> 4) + 3
+            distance = ((arg1 & 15) << 8) + arg2 + 1
+        if distance > len(out):
+            raise ValueError('invalid YKCMP type 4 back-reference')
+        for _ in range(length):
+            out.append(out[-distance])
+    if len(out) != expected or pos != len(src):
+        raise ValueError(f'YKCMP type 4 size mismatch: {len(out)} != {expected}')
+    return bytes(out)
+
+
+def type4_compress(src):
+    """Greedy encoder for the original YKCMP LZ codec."""
+    src = bytes(src)
+    out = bytearray()
+    literals = bytearray()
+
+    def flush():
+        while literals:
+            length = min(len(literals), 0x7f)
+            out.append(length)
+            out.extend(literals[:length])
+            del literals[:length]
+
+    pos = 0
+    while pos < len(src):
+        best_length = 0
+        best_distance = 0
+        start = max(0, pos - 4096)
+        for candidate in range(pos - 1, start - 1, -1):
+            distance = pos - candidate
+            length = 0
+            while (length < 514 and pos + length < len(src)
+                   and src[candidate + length % distance] == src[pos + length]):
+                length += 1
+            if length > best_length:
+                best_length, best_distance = length, distance
+        if best_length >= 3 or (best_length >= 2 and best_distance <= 256):
+            flush()
+            if best_distance <= 16 and best_length <= 4:
+                use = best_length
+                out.append(0x80 | ((use - 1) << 4) | (best_distance - 1))
+            elif best_distance <= 256 and best_length <= 33:
+                use = best_length
+                out.extend((0xc0 + use - 2, best_distance - 1))
+            else:
+                use = min(best_length, 514)
+                value = use - 3
+                out.extend((0xe0 + (value >> 4),
+                            ((value & 15) << 4) | ((best_distance - 1) >> 8),
+                            (best_distance - 1) & 0xff))
+            pos += use
+        else:
+            literals.append(src[pos])
+            pos += 1
+            if len(literals) == 0x7f:
+                flush()
+    flush()
+    return bytes(out)
+
+
+def decompress_container(data):
+    if data[:8] != b'YKCMP_V1':
+        raise ValueError('not a YKCMP_V1 container')
+    typ, csize, dsize = struct.unpack_from('<III', data, 8)
+    payload = data[0x14:csize]
+    if typ == 4:
+        return typ, type4_decompress(payload, dsize)
+    if typ == 8:
+        return typ, lz4_decompress(payload, dsize)
+    raise ValueError(f'unsupported YKCMP type {typ}')
+
+
+def compress_container(raw, typ=4):
+    if typ == 4:
+        payload = type4_compress(raw)
+    elif typ == 8:
+        payload = lz4_compress(raw)
+    else:
+        raise ValueError(f'unsupported YKCMP type {typ}')
+    return b'YKCMP_V1' + struct.pack('<III', typ, len(payload) + 0x14,
+                                      len(raw)) + payload
 
 def lz4_compress(src):
     # Prefer the real LZ4 library (raw block, high compression) -- required for
