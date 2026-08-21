@@ -129,3 +129,8 @@ vits-cli copy-save 3 en --horror-on --replace  # 覆盖槽3，英语+正常模�
 ## 免责声明
 
 仅供学习交流。修改存档有风险，请务必备份。与 Nippon Ichi Software 无关。
+
+## 许可证
+
+本项目自行编写的源代码采用 [GNU General Public License v3.0 only](LICENSE)
+（GPL-3.0-only）发布。游戏名称、商标及从游戏文件提取的数据仍归其各自权利人所有。
